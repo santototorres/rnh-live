@@ -22,8 +22,6 @@ services:
     environment:
       DATABASE_URL: "postgresql://rnh:rnhpassword@db:5432/rnh_db?schema=public"
       PORT: 3001
-    ports:
-      - "3001:3001"
     depends_on:
       - db
 
@@ -36,8 +34,6 @@ services:
       NEXT_PUBLIC_API_URL: "https://xtreetx.com/rnh/api"
       NEXT_PUBLIC_SOCKET_URL: "https://xtreetx.com"
       NEXT_PUBLIC_SOCKET_PATH: "/rnh/socket.io"
-    ports:
-      - "3000:3000"
     depends_on:
       - backend
 
