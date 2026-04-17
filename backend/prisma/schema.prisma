@@ -1,0 +1,114 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Tournament {
+  id        String   @id @default(cuid())
+  name      String
+  status    String   @default("setup") // setup, active, finished
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  categories Category[]
+}
+
+model Category {
+  id             String      @id @default(cuid())
+  name           String
+  tournamentId   String
+  judgesCount    Int         @default(3)
+  groupSize      Int         @default(4) // 4 or 5 normally
+  qualifyPercent Float       @default(0.3) // e.g. 0.3 = 30%
+  tournament     Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  
+  participants   Participant[]
+  rounds         Round[]
+  judges         Judge[]
+}
+
+model Judge {
+  id         String   @id @default(cuid())
+  name       String
+  pin        String   @unique
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  scores     Score[]
+}
+
+model Participant {
+  id         String     @id @default(cuid())
+  name       String
+  alias      String?
+  categoryId String
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  groupPlacements GroupParticipant[]
+  scores          Score[]
+}
+
+model Round {
+  id         String   @id @default(cuid())
+  number     Int      // 1 = qualifiers, 2 = semi, 3 = final etc
+  status     String   @default("pending") // pending, active, completed
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  groups     Group[]
+  scores     Score[]
+}
+
+model Group {
+  id         String   @id @default(cuid())
+  name       String   // e.g. "Heat 1"
+  status     String   @default("pending") // pending, active, completed
+  roundId    String
+  round      Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  
+  participants GroupParticipant[]
+}
+
+model GroupParticipant {
+  id            String      @id @default(cuid())
+  order         Int         // skating order 1, 2, 3...
+  groupId       String
+  participantId String
+  group         Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, participantId])
+}
+
+model Score {
+  id            String      @id @default(cuid())
+  value         Int         // 1 to 5
+  judgeId       String
+  participantId String
+  roundId       String
+  
+  judge       Judge       @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  round       Round       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([judgeId, participantId, roundId])
+}
+
+model SystemState {
+  id                   String  @id @default("global") // Single row
+  status               String  @default("setup") // setup, torneo_iniciado, grupo_activo, pasada_activa, pasada_cerrada, transicion
+  activeTournamentId   String?
+  activeCategoryId     String?
+  activeRoundId        String?
+  activeGroupId        String?
+  activeParticipantId  String?
+  
+  // To track judge consensus during a run
+  consensusCount       Int     @default(0)
+  
+  updatedAt            DateTime @updatedAt
+}
