@@ -14,7 +14,7 @@ export default function AdminView() {
 
   const fetchStructure = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/rnh/api";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/rnh/api";
       const res = await fetch(`${apiUrl}/admin/structure`);
       if (res.ok) {
         setStructure(await res.json());
@@ -64,7 +64,7 @@ export default function AdminView() {
       Papa.parse(csvText, {
         complete: async (results) => {
           try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/rnh/api";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/rnh/api";
             const response = await fetch(`${apiUrl}/admin/upload`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

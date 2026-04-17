@@ -42,7 +42,7 @@ export default function JudgeView() {
     if (!pinInput) return;
     setLoadingConfig(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/rnh/api";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/rnh/api";
       const res = await fetch(`${apiUrl}/judges/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

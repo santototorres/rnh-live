@@ -17,9 +17,9 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    // Uses Next.js environment variables set in docker-compose or .env
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
-    const socketPath = process.env.NEXT_PUBLIC_SOCKET_PATH || "/rnh/socket.io";
+    // Uses Next.js environment variables. Blank string forces relative host resolving in browser
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "";
+    const socketPath = process.env.NEXT_PUBLIC_SOCKET_PATH || "/rnh/socket.io/";
 
     const socketInstance = io(socketUrl, {
       path: socketPath,
