@@ -18,7 +18,6 @@ const io = new Server(server, {
   path: '/rnh/socket.io'
 });
 
-const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
