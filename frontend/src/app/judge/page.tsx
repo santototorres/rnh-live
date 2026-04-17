@@ -2,45 +2,78 @@
 
 import { useSocket } from "@/components/SocketProvider";
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function JudgeView() {
   const { socket, connected } = useSocket();
-  const [systemState, setSystemState] = useState<any>(null);
-  const [activeScore, setActiveScore] = useState<number | null>(null);
+  const [state, setState] = useState<any>(null);
+  const [scores, setScores] = useState<Record<string, number>>({});
   
-  // Auth state
+  // Auth
   const [judge, setJudge] = useState<any>(null);
   const [pinInput, setPinInput] = useState("");
-  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
+
+  // Consensus feedback
+  const [myEndPasada, setMyEndPasada] = useState(false);
+  const [myNextPasada, setMyNextPasada] = useState(false);
+  const [myNextGroup, setMyNextGroup] = useState(false);
+
+  // Pasada results
+  const [pasadaResults, setPasadaResults] = useState<any>(null);
+  const [groupResults, setGroupResults] = useState<any>(null);
 
   useEffect(() => {
-    // Optionally restore judge from local storage if needed on reload
-    const storedJudge = localStorage.getItem("rnh_judge");
-    if (storedJudge) setJudge(JSON.parse(storedJudge));
+    const stored = localStorage.getItem("rnh_judge");
+    if (stored) setJudge(JSON.parse(stored));
   }, []);
 
   useEffect(() => {
     if (!socket || !judge) return;
     
-    socket.emit("request_system_state");
+    socket.emit("request_state");
 
-    socket.on("state_changed", (newState) => {
-      setSystemState(newState);
-      // Reset score if participant changed
-      if (newState.status !== "pasada_activa") {
-        setActiveScore(null);
+    socket.on("state_update", (newState) => {
+      setState(newState);
+      // Reset consensus buttons on state transitions
+      if (newState.status === "pasada_activa") {
+        setMyEndPasada(false);
+        setPasadaResults(null);
+      }
+      if (newState.status === "pasada_cerrada") {
+        setMyNextPasada(false);
+      }
+      if (newState.status === "grupo_cerrado") {
+        setMyNextGroup(false);
       }
     });
 
+    socket.on("pasada_results", (data) => {
+      setPasadaResults(data);
+    });
+
+    socket.on("group_results", (data) => {
+      setGroupResults(data);
+    });
+
+    socket.on("consensus_progress", (data) => {
+      // Force re-render for consensus UI
+    });
+
     return () => {
-      socket.off("state_changed");
+      socket.off("state_update");
+      socket.off("pasada_results");
+      socket.off("group_results");
+      socket.off("consensus_progress");
     };
   }, [socket, judge]);
 
+  // ── Login ──
   const handleLogin = async () => {
     if (!pinInput) return;
-    setLoadingConfig(true);
+    setLoginLoading(true);
+    setLoginError("");
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/rnh/api";
       const res = await fetch(`${apiUrl}/judges/login`, {
@@ -53,119 +86,248 @@ export default function JudgeView() {
         setJudge(data);
         localStorage.setItem("rnh_judge", JSON.stringify(data));
       } else {
-        alert(data.error);
+        setLoginError(data.error || "PIN inválido");
       }
-    } catch (e) {
-      alert("Error al conectar con el servidor.");
+    } catch {
+      setLoginError("Error de conexión");
     } finally {
-      setLoadingConfig(false);
+      setLoginLoading(false);
     }
   };
 
-  const handleScore = (val: number) => {
-    if (!socket || systemState?.status !== "pasada_activa" || !judge) return;
-    setActiveScore(val);
-    
-    // We send judgeId, and if DB model requires participantId we should have it in system state
-    // But for MVP, the server handles mapping via active state
-    socket.emit("submit_score", { score: val, judgeId: judge.id });
+  const handleLogout = () => {
+    setJudge(null);
+    localStorage.removeItem("rnh_judge");
+    setScores({});
   };
 
-  const handleFinish = () => {
+  // ── Score ──
+  const handleScore = (participantId: string, val: number) => {
+    if (!socket || !judge || state?.status !== "pasada_activa") return;
+    setScores(prev => ({ ...prev, [participantId]: val }));
+    socket.emit("submit_score", { score: val, judgeId: judge.id, participantId });
+  };
+
+  // ── Consensus actions ──
+  const handleEndPasada = () => {
     if (!socket || !judge) return;
-    socket.emit("judge_consensus_ready", { judgeId: judge.id });
+    setMyEndPasada(true);
+    socket.emit("judge_end_pasada", { judgeId: judge.id });
   };
 
-  // -----------------------------------
-  // VISTA LOGIN
-  // -----------------------------------
+  const handleNextPasada = () => {
+    if (!socket || !judge) return;
+    setMyNextPasada(true);
+    socket.emit("judge_next_pasada", { judgeId: judge.id });
+  };
+
+  const handleNextGroup = () => {
+    if (!socket || !judge) return;
+    setMyNextGroup(true);
+    socket.emit("judge_next_group", { judgeId: judge.id });
+  };
+
+  // ─────────── LOGIN SCREEN ───────────
   if (!judge) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-4 bg-background min-h-screen">
         <div className="w-full max-w-sm bg-surface p-8 rounded-2xl border border-border text-center">
           <h2 className="text-2xl font-black text-white mb-2 uppercase">Identificación</h2>
-          <p className="text-gray-400 mb-8 text-sm">Ingresa tu código PIN de Juez</p>
+          <p className="text-gray-400 mb-6 text-sm">Ingresa tu PIN asignado por el Admin</p>
           
           <input 
             type="number" 
             placeholder="****"
             value={pinInput}
             onChange={(e) => setPinInput(e.target.value)}
-            className="w-full bg-background border-2 border-border rounded-xl p-4 text-center text-4xl text-white font-black tracking-[1em] focus:border-primary focus:outline-none mb-6"
+            className="w-full bg-background border-2 border-border rounded-xl p-4 text-center text-4xl text-white font-black tracking-[1em] focus:border-primary focus:outline-none mb-4"
             maxLength={4}
           />
+
+          {loginError && (
+            <p className="text-red-500 text-sm mb-4 font-bold">{loginError}</p>
+          )}
           
           <button 
             onClick={handleLogin}
-            disabled={loadingConfig || !pinInput}
+            disabled={loginLoading || !pinInput}
             className="w-full bg-primary text-white font-bold p-4 rounded-xl hover:bg-primary-hover disabled:opacity-50"
           >
-            {loadingConfig ? "Verificando..." : "Entrar a Calificar"}
+            {loginLoading ? "Verificando..." : "Entrar a Calificar"}
           </button>
         </div>
       </div>
     );
   }
 
-  // -----------------------------------
-  // VISTA PRINCIPAL VOTACION
-  // -----------------------------------
-  const isVotingEnabled = systemState?.status === "pasada_activa";
+  // ─────────── MAIN JUDGE VIEW ───────────
+  const isPasadaActiva = state?.status === "pasada_activa";
+  const isPasadaCerrada = state?.status === "pasada_cerrada";
+  const isGrupoCerrado = state?.status === "grupo_cerrado";
+  const participants = state?.groupParticipants || [];
+  const consensusEnd = state?.consensus?.endPasada || [];
+  const consensusNext = state?.consensus?.nextPasada || [];
+  const consensusGroup = state?.consensus?.nextGroup || [];
 
   return (
     <div className="flex-1 flex flex-col p-4 bg-background min-h-screen">
-      <header className="flex justify-between items-center mb-8 border-b border-border pb-4">
+      {/* Header */}
+      <header className="flex justify-between items-center mb-4 border-b border-border pb-3">
         <div>
-          <h1 className="text-xl font-bold uppercase text-white">PANEL DE JUEZ</h1>
-          <p className="text-xs text-primary font-bold">JUEZ ID: {judge.pin} | {judge.name}</p>
+          <h1 className="text-lg font-bold uppercase text-white">Panel de Juez</h1>
+          <p className="text-xs text-primary font-bold">{judge.name} • {judge.categoryName || 'Categoría'}</p>
         </div>
-        <div className={`px-3 py-1 rounded-full text-xs font-bold ${connected ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-          {connected ? "CONECTADO" : "SIN CONEXIÓN"}
+        <div className="flex gap-2 items-center">
+          <div className={`px-3 py-1 rounded-full text-xs font-bold ${connected ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
+            {connected ? "LIVE" : "OFF"}
+          </div>
+          <button onClick={handleLogout} className="text-xs text-gray-500 hover:text-white">Salir</button>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col justify-center max-w-2xl mx-auto w-full gap-8">
-        {/* Participant Info */}
-        <div className="bg-surface p-6 rounded-2xl border border-border text-center">
-          <p className="text-gray-400 font-bold mb-2 uppercase text-sm tracking-widest">Puntuando a:</p>
-          <h2 className="text-4xl font-black italic text-white uppercase break-all">
-            {systemState?.activeParticipantName || "ESPERANDO TURNO..."}
-          </h2>
-        </div>
+      {/* Status bar */}
+      <div className="bg-surface rounded-xl p-3 mb-4 flex justify-between items-center text-sm">
+        <span className="text-gray-400">{state?.activeGroupName || "—"} • Pasada {state?.activePasadaNumber || 0}/{state?.totalPasadas || 0}</span>
+        <span className="text-primary font-bold uppercase">{state?.status?.replace(/_/g, ' ') || "ESPERANDO"}</span>
+      </div>
 
-        {/* Arcade Buttons Wrapper */}
-        <div className="grid grid-cols-5 gap-3">
-          {[1, 2, 3, 4, 5].map((val) => (
-            <motion.button
-              key={val}
-              whileTap={isVotingEnabled ? { scale: 0.9 } : {}}
-              disabled={!isVotingEnabled}
-              onClick={() => handleScore(val)}
-              className={`
-                aspect-square rounded-2xl text-4xl font-black flex items-center justify-center
-                transition-all duration-200 border-b-8 shadow-xl
-                ${!isVotingEnabled ? 'bg-gray-800 text-gray-600 border-gray-900 cursor-not-allowed opacity-50' : 
-                  activeScore === val 
-                    ? 'bg-white text-black border-gray-400 translate-y-2 border-b-0' 
-                    : 'bg-surface text-primary border-primary hover:bg-primary-hover hover:text-white'}
-              `}
-            >
-              {val}
-            </motion.button>
-          ))}
-        </div>
+      {/* ── PASADA ACTIVA: Scoring ── */}
+      {isPasadaActiva && (
+        <div className="flex-1 flex flex-col gap-3 overflow-auto">
+          <h3 className="text-white font-bold uppercase text-sm tracking-wider mb-1">Califica a cada participante:</h3>
+          
+          {participants.map((p: any) => {
+            const isActive = state?.activeParticipantId === p.id;
+            const currentScore = scores[p.id];
+            return (
+              <div key={p.id} className={`p-3 rounded-xl border transition-all ${isActive ? 'border-primary bg-primary/10 shadow-lg shadow-primary/20' : 'border-border bg-surface'}`}>
+                <div className="flex justify-between items-center mb-2">
+                  <span className={`font-bold ${isActive ? 'text-white text-lg' : 'text-gray-400'}`}>
+                    {isActive && <span className="text-primary mr-2">▶</span>}
+                    {p.name}
+                  </span>
+                  {currentScore && (
+                    <span className="text-primary font-black text-xl">{currentScore}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  {[1, 2, 3, 4, 5].map((val) => (
+                    <motion.button
+                      key={val}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => handleScore(p.id, val)}
+                      className={`py-3 rounded-lg text-lg font-black transition-all border-b-4 ${
+                        currentScore === val 
+                          ? 'bg-white text-black border-gray-400 border-b-0 translate-y-1' 
+                          : 'bg-background text-primary border-primary/50 hover:bg-primary hover:text-white'
+                      }`}
+                    >
+                      {val}
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
 
-        {/* Consense Button */}
-        <button 
-          disabled={!isVotingEnabled}
-          onClick={handleFinish}
-          className={`mt-4 w-full py-6 rounded-2xl font-black text-2xl uppercase tracking-widest transition-all ${
-            !isVotingEnabled ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary-hover active:scale-95 shadow-primary-hover/50 shadow-lg'
-          }`}
-        >
-          {activeScore ? 'Guardar Puntuación' : 'Selecciona un score'}
-        </button>
-      </main>
+          {/* End pasada button */}
+          <button 
+            onClick={handleEndPasada}
+            disabled={myEndPasada}
+            className={`mt-4 w-full py-5 rounded-2xl font-black text-xl uppercase tracking-wider transition-all ${
+              myEndPasada 
+                ? 'bg-green-900/30 text-green-500 border border-green-500/50' 
+                : 'bg-primary text-white hover:bg-primary-hover active:scale-95 shadow-lg'
+            }`}
+          >
+            {myEndPasada 
+              ? `✓ ESPERANDO CONSENSO (${consensusEnd.length}/${state?.judgesRequired || 3})` 
+              : 'TERMINAR PASADA'}
+          </button>
+        </div>
+      )}
+
+      {/* ── PASADA CERRADA: Results + Next ── */}
+      {isPasadaCerrada && (
+        <div className="flex-1 flex flex-col gap-4">
+          {pasadaResults && (
+            <div className="bg-surface rounded-xl p-4 border border-border">
+              <h3 className="text-white font-bold uppercase text-sm mb-3">Resultados Pasada {pasadaResults.pasadaNumber}</h3>
+              {pasadaResults.ranking?.map((r: any) => (
+                <div key={r.participantId} className="flex justify-between items-center py-2 border-b border-border last:border-0">
+                  <span className="text-gray-300">
+                    <span className="text-primary font-bold mr-2">#{r.position}</span>
+                    {r.name}
+                  </span>
+                  <span className="text-white font-black">{r.totalScore} pts</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button 
+            onClick={handleNextPasada}
+            disabled={myNextPasada}
+            className={`w-full py-5 rounded-2xl font-black text-xl uppercase tracking-wider transition-all ${
+              myNextPasada 
+                ? 'bg-blue-900/30 text-blue-400 border border-blue-500/50' 
+                : 'bg-primary text-white hover:bg-primary-hover active:scale-95 shadow-lg'
+            }`}
+          >
+            {myNextPasada 
+              ? `✓ ESPERANDO (${consensusNext.length}/${state?.judgesRequired || 3})` 
+              : 'SIGUIENTE PASADA'}
+          </button>
+        </div>
+      )}
+
+      {/* ── GRUPO CERRADO: Group Results + Next Group ── */}
+      {isGrupoCerrado && (
+        <div className="flex-1 flex flex-col gap-4">
+          {groupResults && (
+            <div className="bg-surface rounded-xl p-4 border border-border">
+              <h3 className="text-white font-bold uppercase text-sm mb-3">Ranking del Grupo</h3>
+              {groupResults.ranking?.map((r: any) => (
+                <div key={r.participantId} className={`flex justify-between items-center py-2 border-b border-border last:border-0 ${r.isTied ? 'bg-yellow-500/10' : ''}`}>
+                  <span className="text-gray-300">
+                    <span className="text-primary font-bold mr-2">#{r.position}</span>
+                    {r.name}
+                    {r.isTied && <span className="text-yellow-500 text-xs ml-2 font-bold">EMPATE</span>}
+                  </span>
+                  <span className="text-white font-black">{r.totalScore} pts</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button 
+            onClick={handleNextGroup}
+            disabled={myNextGroup}
+            className={`w-full py-5 rounded-2xl font-black text-xl uppercase tracking-wider transition-all ${
+              myNextGroup 
+                ? 'bg-purple-900/30 text-purple-400 border border-purple-500/50' 
+                : 'bg-primary text-white hover:bg-primary-hover active:scale-95 shadow-lg'
+            }`}
+          >
+            {myNextGroup 
+              ? `✓ ESPERANDO (${consensusGroup.length}/${state?.judgesRequired || 3})` 
+              : 'SIGUIENTE GRUPO'}
+          </button>
+        </div>
+      )}
+
+      {/* ── WAITING STATES ── */}
+      {!isPasadaActiva && !isPasadaCerrada && !isGrupoCerrado && (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 2 }}
+              className="w-20 h-20 border-4 border-primary rounded-full flex items-center justify-center mx-auto mb-6">
+              <span className="text-primary font-black text-2xl">⏳</span>
+            </motion.div>
+            <p className="text-gray-400 font-bold uppercase tracking-widest">Esperando que el Admin inicie...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

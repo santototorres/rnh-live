@@ -9,30 +9,25 @@ export const loginJudge = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "PIN requerido" });
     }
 
-    let judge = await prisma.judge.findUnique({ where: { pin } });
+    const judge = await prisma.judge.findUnique({
+      where: { pin },
+      include: { category: true }
+    });
 
-    // HACK: Auto-create judge for testing if PIN doesn't exist, using the first category available
     if (!judge) {
-      const firstCategory = await prisma.category.findFirst();
-      if (!firstCategory) return res.status(400).json({ error: "No hay categorías creadas aún." });
-
-      judge = await prisma.judge.create({
-        data: {
-          name: `Juez ${pin}`,
-          pin,
-          categoryId: firstCategory.id
-        }
-      });
+      return res.status(401).json({ error: "PIN no encontrado. Contacta al administrador." });
     }
 
     res.status(200).json({ 
       id: judge.id,
       name: judge.name,
-      categoryId: judge.categoryId
+      pin: judge.pin,
+      categoryId: judge.categoryId,
+      categoryName: judge.category.name
     });
 
   } catch (error: any) {
     console.error("Judge login error:", error);
-    res.status(500).json({ error: "Internal Server Error", detail: error.message || error.toString() });
+    res.status(500).json({ error: "Internal Server Error", detail: error.message });
   }
 };

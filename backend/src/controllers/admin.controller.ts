@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import prisma from '../db';
 
+// ─── Upload Participants from Google Sheets CSV ───
+
 export const uploadParticipants = async (req: Request, res: Response) => {
   try {
     const { participants, groupSize = 4 } = req.body;
@@ -17,13 +19,11 @@ export const uploadParticipants = async (req: Request, res: Response) => {
       });
     }
 
-    // 2. Group participants by their "Categoria" column from Google Sheets
+    // 2. Group participants by their "Categoria" column
     const participantsByCategory: Record<string, any[]> = {};
     for (const p of participants) {
       const catName = p.Categoria || "Open";
-      if (!participantsByCategory[catName]) {
-        participantsByCategory[catName] = [];
-      }
+      if (!participantsByCategory[catName]) participantsByCategory[catName] = [];
       participantsByCategory[catName].push(p);
     }
 
@@ -32,7 +32,6 @@ export const uploadParticipants = async (req: Request, res: Response) => {
 
     // 3. Process each Category
     for (const [catName, catParticipants] of Object.entries(participantsByCategory)) {
-      // Find or create category
       let category = await prisma.category.findFirst({ 
         where: { tournamentId: tournament.id, name: catName } 
       });
@@ -43,17 +42,16 @@ export const uploadParticipants = async (req: Request, res: Response) => {
         });
       }
 
-      // Insert Participants (Nombre, Alias)
       const createdParticipants = await Promise.all(
-        catParticipants.map(async (p: any) => {
-          return prisma.participant.create({
+        catParticipants.map(async (p: any) =>
+          prisma.participant.create({
             data: {
               name: p.Nombre || p.name || 'Unknown',
               alias: p.Alias || p.alias || null,
               categoryId: category!.id
             }
-          });
-        })
+          })
+        )
       );
 
       totalParticipants += createdParticipants.length;
@@ -62,99 +60,185 @@ export const uploadParticipants = async (req: Request, res: Response) => {
       let round1 = await prisma.round.findFirst({ 
         where: { categoryId: category.id, number: 1 } 
       });
-      
       if (!round1) {
-        round1 = await prisma.round.create({
-          data: { number: 1, categoryId: category.id }
-        });
+        round1 = await prisma.round.create({ data: { number: 1, categoryId: category.id } });
       }
 
-      // Shuffle participants randomly
+      // Shuffle and chunk
       const shuffled = [...createdParticipants].sort(() => Math.random() - 0.5);
-      
       const chunks = [];
       for (let i = 0; i < shuffled.length; i += groupSize) {
         chunks.push(shuffled.slice(i, i + groupSize));
       }
 
-      // Create Groups
       for (let i = 0; i < chunks.length; i++) {
-        const groupData = await prisma.group.create({
-          data: {
-            name: `Heat ${i + 1}`,
-            roundId: round1.id
-          }
+        const group = await prisma.group.create({
+          data: { name: `Heat ${i + 1}`, roundId: round1.id }
         });
-        
-        // Assign participants to group with specific skating order
-        await Promise.all(chunks[i].map((p, index) => {
-          return prisma.groupParticipant.create({
-            data: {
-              groupId: groupData.id,
-              participantId: p.id,
-              order: index + 1
-            }
-          });
-        }));
+        await Promise.all(chunks[i].map((p, index) =>
+          prisma.groupParticipant.create({
+            data: { groupId: group.id, participantId: p.id, order: index + 1 }
+          })
+        ));
       }
 
       totalGroups += chunks.length;
     }
 
     res.status(200).json({ 
-      message: "Participantes importados y agrupados por categoría.",
+      message: "Participantes importados.",
       tournamentId: tournament.id,
       totalParticipants,
       totalGroups
     });
-
   } catch (error) {
     console.error("Error uploadParticipants:", error);
     res.status(500).json({ error: "Internal Server Error during upload." });
   }
 };
 
-export const getStructure = async (req: Request, res: Response) => {
+// ─── Get Full Tournament Structure ───
+
+export const getStructure = async (_req: Request, res: Response) => {
   try {
     const tournament = await prisma.tournament.findFirst({
-      where: { status: "setup" },
       include: {
         categories: {
           include: {
+            judges: true,
             rounds: {
               include: {
                 groups: {
                   include: {
                     participants: {
-                      include: {
-                        participant: true
-                      },
-                      orderBy: {
-                        order: 'asc'
-                      }
+                      include: { participant: true },
+                      orderBy: { order: 'asc' }
                     }
                   },
-                  orderBy: {
-                    name: 'asc'
-                  }
+                  orderBy: { name: 'asc' }
                 }
               },
-              orderBy: {
-                number: 'asc'
-              }
+              orderBy: { number: 'asc' }
             }
           }
         }
-      }
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
-    if (!tournament) {
-      return res.status(404).json({ error: "No active tournament found." });
-    }
-
+    if (!tournament) return res.status(404).json({ error: "No tournament found." });
     res.status(200).json(tournament);
   } catch (error) {
     console.error("Error fetching structure:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+// ─── Update Category Config ───
+
+export const updateCategory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { pasadasCount, groupSize, qualifyPercent, judgesCount } = req.body;
+
+    const updated = await prisma.category.update({
+      where: { id: id as string },
+      data: {
+        ...(pasadasCount !== undefined && { pasadasCount }),
+        ...(groupSize !== undefined && { groupSize }),
+        ...(qualifyPercent !== undefined && { qualifyPercent }),
+        ...(judgesCount !== undefined && { judgesCount })
+      }
+    });
+
+    res.status(200).json(updated);
+  } catch (error) {
+    console.error("Error updateCategory:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+// ─── CRUD Judges ───
+
+export const createJudge = async (req: Request, res: Response) => {
+  try {
+    const { name, pin, categoryId } = req.body;
+    if (!name || !pin || !categoryId) {
+      return res.status(400).json({ error: "name, pin, and categoryId are required" });
+    }
+
+    const existing = await prisma.judge.findUnique({ where: { pin } });
+    if (existing) return res.status(409).json({ error: "PIN already exists" });
+
+    const judge = await prisma.judge.create({
+      data: { name, pin, categoryId }
+    });
+
+    res.status(201).json(judge);
+  } catch (error) {
+    console.error("Error createJudge:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getJudges = async (req: Request, res: Response) => {
+  try {
+    const categoryId = req.query.categoryId as string | undefined;
+    const judges = await prisma.judge.findMany({
+      where: categoryId ? { categoryId } : {},
+      include: { category: true }
+    });
+    res.status(200).json(judges);
+  } catch (error) {
+    console.error("Error getJudges:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const deleteJudge = async (req: Request, res: Response) => {
+  try {
+    await prisma.judge.delete({ where: { id: req.params.id as string } });
+    res.status(200).json({ message: "Judge deleted" });
+  } catch (error) {
+    console.error("Error deleteJudge:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+// ─── Reset Tournament ───
+
+export const resetTournament = async (_req: Request, res: Response) => {
+  try {
+    // Delete all data in order
+    await prisma.score.deleteMany({});
+    await prisma.groupParticipant.deleteMany({});
+    await prisma.group.deleteMany({});
+    await prisma.round.deleteMany({});
+    await prisma.participant.deleteMany({});
+    await prisma.judge.deleteMany();
+    await prisma.category.deleteMany();
+    await prisma.tournament.deleteMany();
+
+    await prisma.systemState.upsert({
+      where: { id: 'global' },
+      update: {
+        status: 'setup',
+        activeTournamentId: null,
+        activeCategoryId: null,
+        activeRoundId: null,
+        activeGroupId: null,
+        activeParticipantId: null,
+        activePasadaNumber: 1,
+        consensusEndPasada: '[]',
+        consensusNextPasada: '[]',
+        consensusNextGroup: '[]'
+      },
+      create: { id: 'global' }
+    });
+
+    res.status(200).json({ message: "Tournament reset complete" });
+  } catch (error) {
+    console.error("Error resetTournament:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

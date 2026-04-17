@@ -21,8 +21,9 @@ model Category {
   name           String
   tournamentId   String
   judgesCount    Int         @default(3)
-  groupSize      Int         @default(4) // 4 or 5 normally
-  qualifyPercent Float       @default(0.3) // e.g. 0.3 = 30%
+  groupSize      Int         @default(4)
+  pasadasCount   Int         @default(2)    // number of runs per group
+  qualifyPercent Float       @default(0.5)  // e.g. 0.5 = top 50% advance
   tournament     Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   
   participants   Participant[]
@@ -63,11 +64,12 @@ model Round {
 }
 
 model Group {
-  id         String   @id @default(cuid())
-  name       String   // e.g. "Heat 1"
-  status     String   @default("pending") // pending, active, completed
-  roundId    String
-  round      Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  name          String   // e.g. "Heat 1"
+  status        String   @default("pending") // pending, active, completed
+  currentPasada Int      @default(0) // 0 = not started, 1 = pasada 1, etc.
+  roundId       String
+  round         Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
   
   participants GroupParticipant[]
 }
@@ -86,6 +88,7 @@ model GroupParticipant {
 model Score {
   id            String      @id @default(cuid())
   value         Int         // 1 to 5
+  pasadaNumber  Int         @default(1) // which run this score belongs to
   judgeId       String
   participantId String
   roundId       String
@@ -94,20 +97,25 @@ model Score {
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
   round       Round       @relation(fields: [roundId], references: [id], onDelete: Cascade)
 
-  @@unique([judgeId, participantId, roundId])
+  @@unique([judgeId, participantId, roundId, pasadaNumber])
 }
 
 model SystemState {
   id                   String  @id @default("global") // Single row
-  status               String  @default("setup") // setup, torneo_iniciado, grupo_activo, pasada_activa, pasada_cerrada, transicion
+  status               String  @default("setup")
+  // setup | torneo_iniciado | grupo_activo | pasada_activa | pasada_cerrada
+  // | grupo_cerrado | ranking_visible | ronda_cerrada | clasificacion | torneo_finalizado
   activeTournamentId   String?
   activeCategoryId     String?
   activeRoundId        String?
   activeGroupId        String?
   activeParticipantId  String?
+  activePasadaNumber   Int     @default(1)
   
-  // To track judge consensus during a run
-  consensusCount       Int     @default(0)
+  // Consensus tracking (stored as JSON array of judgeIds who confirmed)
+  consensusEndPasada   String  @default("[]") // JSON array of judgeIds
+  consensusNextPasada  String  @default("[]")
+  consensusNextGroup   String  @default("[]")
   
   updatedAt            DateTime @updatedAt
 }

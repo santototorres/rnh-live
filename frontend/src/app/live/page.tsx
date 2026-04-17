@@ -6,106 +6,201 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function LiveView() {
   const { socket, connected } = useSocket();
-  const [systemState, setSystemState] = useState<any>(null);
+  const [state, setState] = useState<any>(null);
+  const [pasadaResults, setPasadaResults] = useState<any>(null);
+  const [groupResults, setGroupResults] = useState<any>(null);
+  const [classification, setClassification] = useState<any>(null);
+  const [showResults, setShowResults] = useState<"pasada" | "group" | "classification" | null>(null);
 
   useEffect(() => {
     if (!socket) return;
-    
-    socket.emit("request_system_state");
+    socket.emit("request_state");
 
-    socket.on("state_changed", (newState) => {
-      setSystemState(newState);
+    socket.on("state_update", (s) => {
+      setState(s);
+      if (s.status === "pasada_activa") {
+        setShowResults(null);
+        setPasadaResults(null);
+      }
+    });
+
+    socket.on("pasada_results", (d) => {
+      setPasadaResults(d);
+      setShowResults("pasada");
+    });
+
+    socket.on("group_results", (d) => {
+      setGroupResults(d);
+      setShowResults("group");
+    });
+
+    socket.on("round_classification", (d) => {
+      setClassification(d);
+      setShowResults("classification");
     });
 
     return () => {
-      socket.off("state_changed");
+      socket.off("state_update");
+      socket.off("pasada_results");
+      socket.off("group_results");
+      socket.off("round_classification");
     };
   }, [socket]);
 
-  const isActive = systemState?.status === "pasada_activa";
-  const skaterName = systemState?.activeParticipantName || "PREPARANDO...";
+  const isActive = state?.status === "pasada_activa" && !showResults;
 
   return (
-    <div className="flex-1 flex flex-col bg-background min-h-screen overflow-hidden text-center justify-center p-8 relative">
-      
-      {/* Background Graphic Elements */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/10 via-[#0B0B0B] to-[#0B0B0B] z-0"></div>
-      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-background via-primary to-background opacity-50 z-0"></div>
+    <div className="flex-1 flex flex-col bg-background min-h-screen overflow-hidden text-center justify-center relative">
+      {/* Background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/10 via-[#0B0B0B] to-[#0B0B0B] z-0" />
+      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-background via-primary to-background opacity-50 z-0" />
 
-      <div className="z-10 absolute top-8 right-8">
+      {/* LIVE badge */}
+      <div className="z-10 absolute top-6 right-6">
         <div className={`px-4 py-2 rounded-full text-xs font-bold border ${connected ? 'border-green-500 text-green-500 bg-green-500/10 shadow-[0_0_15px_rgba(34,197,94,0.5)]' : 'border-red-500 text-red-500 bg-red-500/10'}`}>
           {connected ? "LIVE" : "OFFLINE"}
         </div>
       </div>
 
-      <div className="z-10 absolute top-8 left-8 text-left">
-        <h1 className="text-3xl font-black tracking-tighter uppercase italic text-white drop-shadow-md">
-          ROLL <span className="text-primary font-bold">NOT</span> HATE
+      {/* Logo */}
+      <div className="z-10 absolute top-6 left-6 text-left">
+        <h1 className="text-2xl font-black tracking-tighter uppercase italic text-white">
+          ROLL <span className="text-primary">NOT</span> HATE
         </h1>
-        <p className="text-primary font-mono text-sm tracking-widest mt-1">BROADCAST SYSTEM</p>
+        <p className="text-primary font-mono text-xs tracking-widest mt-1">BROADCAST SYSTEM</p>
       </div>
 
+      {/* Status bar */}
+      {state?.activeGroupName && (
+        <div className="z-10 absolute bottom-6 left-1/2 -translate-x-1/2">
+          <div className="bg-surface/80 backdrop-blur-sm rounded-full px-6 py-2 flex gap-4 text-sm border border-border">
+            <span className="text-primary font-bold">{state.activeCategoryName}</span>
+            <span className="text-gray-400">|</span>
+            <span className="text-white font-bold">{state.activeGroupName}</span>
+            <span className="text-gray-400">|</span>
+            <span className="text-gray-300">Pasada {state.activePasadaNumber}/{state.totalPasadas}</span>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
-        {!isActive ? (
-          <motion.div 
-            key="standby"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="flex flex-col items-center justify-center h-full z-10"
-          >
-            <motion.div 
-              animate={{ opacity: [0.5, 1, 0.5] }} 
-              transition={{ repeat: Infinity, duration: 2 }}
-              className="w-40 h-40 border-8 border-primary rounded-full flex items-center justify-center mb-12 shadow-[0_0_50px_rgba(255,45,45,0.4)]"
-            >
-              <span className="font-black text-6xl text-primary drop-shadow-[0_0_10px_rgba(255,45,45,1)]">RNH</span>
+        {/* ── STANDBY ── */}
+        {!isActive && !showResults && (
+          <motion.div key="standby"
+            initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, y: -50 }}
+            className="flex flex-col items-center justify-center h-full z-10 p-8">
+            <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }}
+              className="w-32 h-32 border-8 border-primary rounded-full flex items-center justify-center mb-10 shadow-[0_0_50px_rgba(255,45,45,0.4)]">
+              <span className="font-black text-5xl text-primary">RNH</span>
             </motion.div>
-            <h1 className="text-5xl md:text-7xl font-black uppercase text-white tracking-widest drop-shadow-[0_5px_5px_rgba(0,0,0,1)]">
-              Torneo Oficial
-            </h1>
-            <p className="mt-8 text-2xl text-gray-300 font-bold uppercase tracking-[0.3em] bg-surface px-10 py-5 rounded-full border-t border-gray-700 shadow-2xl">
-              Próximo skater en breve...
-            </p>
+            <h1 className="text-5xl md:text-7xl font-black uppercase text-white tracking-widest">Torneo Oficial</h1>
+            <p className="mt-6 text-xl text-gray-400 font-bold uppercase tracking-[0.3em]">Próximo skater en breve...</p>
           </motion.div>
-        ) : (
-          <motion.div 
-            key="active"
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 1.1 }}
-            className="flex flex-col items-center justify-center h-full z-10 relative"
-          >
-            <div className="absolute w-[150%] h-40 bg-primary/20 -rotate-3 blur-3xl z-[-1] opacity-50"></div>
+        )}
+
+        {/* ── SKATER ACTIVE ── */}
+        {isActive && (
+          <motion.div key="active"
+            initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 1.1 }}
+            className="flex flex-col items-center justify-center h-full z-10 relative p-8">
+            <div className="absolute w-[150%] h-40 bg-primary/20 -rotate-3 blur-3xl z-[-1] opacity-50" />
             
-            <div className="inline-block px-8 py-3 bg-primary/20 border-2 border-primary rounded-full mb-12 shadow-[0_0_30px_rgba(255,45,45,0.6)]">
-              <span className="text-primary font-black uppercase tracking-[0.4em] flex items-center gap-4 text-2xl">
-                <span className="w-4 h-4 bg-primary rounded-full animate-ping"></span>
+            <div className="inline-block px-6 py-2 bg-primary/20 border-2 border-primary rounded-full mb-8 shadow-[0_0_30px_rgba(255,45,45,0.6)]">
+              <span className="text-primary font-black uppercase tracking-[0.3em] flex items-center gap-3 text-xl">
+                <span className="w-3 h-3 bg-primary rounded-full animate-ping" />
                 EN LA PISTA
               </span>
             </div>
             
-            <h1 className="text-[5rem] sm:text-[8rem] lg:text-[12rem] xl:text-[15rem] font-black uppercase text-white tracking-tighter italic -skew-x-[15deg] leading-[0.8] mb-12 drop-shadow-[0_15px_15px_rgba(0,0,0,0.8)] max-w-[95vw] truncate px-10">
-              {skaterName}
+            <h1 className="text-[4rem] sm:text-[6rem] lg:text-[10rem] xl:text-[13rem] font-black uppercase text-white tracking-tighter italic -skew-x-[12deg] leading-[0.85] mb-8 drop-shadow-[0_10px_15px_rgba(0,0,0,0.8)] max-w-[95vw] truncate px-6">
+              {state?.activeParticipantName || "..."}
             </h1>
             
-            <div className="flex gap-4">
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: "200px" }}
-                className="h-3 bg-white skew-x-[15deg] shadow-[0_0_10px_rgba(255,255,255,0.8)]"
-              ></motion.div>
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: "100px" }}
-                transition={{ delay: 0.2 }}
-                className="h-3 bg-primary skew-x-[15deg] shadow-[0_0_10px_rgba(255,45,45,0.8)]"
-              ></motion.div>
+            <div className="flex gap-3">
+              <motion.div initial={{ width: 0 }} animate={{ width: "180px" }} className="h-2 bg-white skew-x-[12deg] shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
+              <motion.div initial={{ width: 0 }} animate={{ width: "90px" }} transition={{ delay: 0.2 }} className="h-2 bg-primary skew-x-[12deg] shadow-[0_0_10px_rgba(255,45,45,0.8)]" />
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── PASADA RESULTS ── */}
+        {showResults === "pasada" && pasadaResults && (
+          <motion.div key="pasada-results"
+            initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center h-full z-10 p-8">
+            <h2 className="text-xl text-gray-400 font-bold uppercase tracking-[0.3em] mb-2">Resultado Pasada {pasadaResults.pasadaNumber}</h2>
+            <div className="w-full max-w-lg">
+              {pasadaResults.ranking?.map((r: any, i: number) => (
+                <motion.div key={r.participantId}
+                  initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.15 }}
+                  className={`flex justify-between items-center py-4 px-6 mb-2 rounded-xl ${i === 0 ? 'bg-primary/20 border border-primary' : 'bg-surface border border-border'}`}>
+                  <span className="flex items-center gap-3">
+                    <span className={`text-3xl font-black ${i === 0 ? 'text-primary' : 'text-gray-500'}`}>#{r.position}</span>
+                    <span className="text-white text-xl font-bold">{r.name}</span>
+                  </span>
+                  <span className="text-white text-2xl font-black">{r.totalScore}<span className="text-gray-500 text-sm ml-1">pts</span></span>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── GROUP RESULTS ── */}
+        {showResults === "group" && groupResults && (
+          <motion.div key="group-results"
+            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center h-full z-10 p-8">
+            <h2 className="text-xl text-primary font-bold uppercase tracking-[0.3em] mb-6">🏆 Ranking del Grupo</h2>
+            <div className="w-full max-w-lg">
+              {groupResults.ranking?.slice(0, 8).map((r: any, i: number) => (
+                <motion.div key={r.participantId}
+                  initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.2 }}
+                  className={`flex justify-between items-center py-4 px-6 mb-2 rounded-xl ${
+                    i === 0 ? 'bg-yellow-500/20 border border-yellow-500 text-yellow-500' : 
+                    i === 1 ? 'bg-gray-400/10 border border-gray-400' : 
+                    i === 2 ? 'bg-orange-500/10 border border-orange-700' : 'bg-surface border border-border'
+                  }`}>
+                  <span className="flex items-center gap-3">
+                    <span className="text-3xl font-black">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${r.position}`}</span>
+                    <span className="text-white text-xl font-bold">{r.name}</span>
+                    {r.isTied && <span className="text-yellow-500 text-xs font-bold bg-yellow-500/20 px-2 py-1 rounded">EMPATE</span>}
+                  </span>
+                  <span className="text-white text-2xl font-black">{r.totalScore}</span>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── CLASSIFICATION ── */}
+        {showResults === "classification" && classification && (
+          <motion.div key="classification"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center h-full z-10 p-8">
+            <h2 className="text-xl text-green-500 font-bold uppercase tracking-[0.3em] mb-6">
+              🎯 Clasificación — Top {Math.round(classification.qualifyPercent * 100)}%
+            </h2>
+            <div className="w-full max-w-lg">
+              {classification.qualified?.map((r: any, i: number) => (
+                <motion.div key={r.participantId}
+                  initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
+                  className="flex justify-between items-center py-3 px-5 mb-1 rounded-lg bg-green-500/10 border border-green-500/30">
+                  <span className="text-green-300 font-bold">✅ #{r.globalPosition} {r.name}</span>
+                  <span className="text-white font-bold">{r.totalScore}</span>
+                </motion.div>
+              ))}
+              {classification.eliminated?.slice(0, 5).map((r: any, i: number) => (
+                <motion.div key={r.participantId}
+                  initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} transition={{ delay: 0.5 + i * 0.1 }}
+                  className="flex justify-between items-center py-2 px-5 mb-1 rounded-lg bg-red-500/5 border border-red-500/20">
+                  <span className="text-red-400/50">#{r.globalPosition} {r.name}</span>
+                  <span className="text-gray-600">{r.totalScore}</span>
+                </motion.div>
+              ))}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
     </div>
   );
 }
