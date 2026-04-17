@@ -14,4 +14,4 @@ RUN npx tsc
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma db push && node dist/index.js"]
