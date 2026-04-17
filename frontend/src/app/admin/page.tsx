@@ -25,12 +25,28 @@ export default function AdminView() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       Papa.parse(e.target.files[0], {
-        complete: (results) => {
-          console.log("CSV Parsed:", results.data);
-          // Here we would send this data to backend via API or Socket
-          alert("CSV cargado exitosamente. Revisar consola.");
+        complete: async (results) => {
+          try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/rnh/api";
+            const response = await fetch(`${apiUrl}/admin/upload`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ participants: results.data, groupSize: 4 })
+            });
+            const data = await response.json();
+            
+            if (response.ok) {
+              alert(`¡Éxito! ${data.totalParticipants} skaters cargados y divididos en ${data.totalGroups} Heats.`);
+            } else {
+              alert(`Error: ${data.error}`);
+            }
+          } catch (err) {
+            console.error(err);
+            alert("Error conectando con el servidor");
+          }
         },
         header: true,
+        skipEmptyLines: true,
       });
     }
   };

@@ -24,6 +24,10 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Load Routers
+import adminRoutes from './routes/admin.routes';
+app.use('/rnh/api/admin', adminRoutes);
+
 // In-Memory Global State (Simulates the DB state for fast Live Sync)
 let globalState = {
   status: "setup", // setup, torneo_iniciado, grupo_activo, pasada_activa, pasada_cerrada, transicion
