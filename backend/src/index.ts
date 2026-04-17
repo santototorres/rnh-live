@@ -112,6 +112,12 @@ io.on('connection', (socket) => {
       globalState.activeRoundId = firstRound?.id || null;
       
       globalState.consensusCount = 0;
+    } else if (data.action === 'set_active_participant') {
+      globalState.status = "pasada_activa";
+      globalState.activeParticipantId = data.participantId;
+      globalState.activeParticipantName = data.participantName;
+      globalState.activeRoundId = data.roundId;
+      globalState.consensusCount = 0;
     } else if (data.action === 'force_close') {
       globalState.status = "pasada_cerrada";
       globalState.consensusCount = 0;

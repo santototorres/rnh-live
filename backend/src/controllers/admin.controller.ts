@@ -115,3 +115,48 @@ export const uploadParticipants = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal Server Error during upload." });
   }
 };
+
+export const getStructure = async (req: Request, res: Response) => {
+  try {
+    const tournament = await prisma.tournament.findFirst({
+      where: { status: "setup" },
+      include: {
+        categories: {
+          include: {
+            rounds: {
+              include: {
+                groups: {
+                  include: {
+                    participants: {
+                      include: {
+                        participant: true
+                      },
+                      orderBy: {
+                        order: 'asc'
+                      }
+                    }
+                  },
+                  orderBy: {
+                    name: 'asc'
+                  }
+                }
+              },
+              orderBy: {
+                number: 'asc'
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!tournament) {
+      return res.status(404).json({ error: "No active tournament found." });
+    }
+
+    res.status(200).json(tournament);
+  } catch (error) {
+    console.error("Error fetching structure:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};

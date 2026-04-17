@@ -10,6 +10,23 @@ export default function AdminView() {
 
   const [sheetUrl, setSheetUrl] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [structure, setStructure] = useState<any>(null);
+
+  const fetchStructure = async () => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/rnh/api";
+      const res = await fetch(`${apiUrl}/admin/structure`);
+      if (res.ok) {
+        setStructure(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchStructure();
+  }, []);
 
   useEffect(() => {
     if (!socket) return;
@@ -57,6 +74,7 @@ export default function AdminView() {
             
             if (response.ok) {
               alert(`¡Éxito! ${data.totalParticipants} skaters cargados y divididos en ${data.totalGroups} Heats.`);
+              fetchStructure();
             } else {
               alert(`Error: ${data.error}`);
             }
@@ -77,9 +95,9 @@ export default function AdminView() {
     }
   };
 
-  const forceStateChange = (action: string) => {
+  const forceStateChange = (action: string, extraData: any = {}) => {
     if (!socket) return;
-    socket.emit("admin_command", { action });
+    socket.emit("admin_command", { action, ...extraData });
   };
 
   return (
@@ -141,9 +159,63 @@ export default function AdminView() {
             >
               {isSyncing ? "Sincronizando..." : "Sincronizar desde Google Sheets"}
             </button>
+            <button 
+              onClick={fetchStructure}
+              className="mt-2 text-sm text-gray-400 hover:text-white underline text-left"
+            >
+              ⟳ Actualizar Lista de Grupos
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Paginador de Torneo */}
+      <div className="mt-8 bg-background border border-border p-6 rounded-xl">
+        <h2 className="text-xl font-bold text-white mb-6 uppercase border-l-4 border-primary pl-3">Control de Ronda (Heats)</h2>
+        
+        {!structure ? (
+          <p className="text-gray-500 italic">No hay estructura cargada. Sincroniza participantes primero.</p>
+        ) : (
+          <div className="flex flex-col gap-8">
+            {structure.categories?.map((cat: any) => (
+              <div key={cat.id} className="bg-surface p-4 rounded-xl border border-gray-800">
+                <h3 className="text-lg font-black text-white mb-4 uppercase text-primary">{cat.name}</h3>
+                
+                {cat.rounds?.[0]?.groups?.map((group: any) => (
+                  <div key={group.id} className="mb-4 ml-4">
+                    <h4 className="text-white font-bold mb-2">{group.name}</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                      {group.participants?.map((gp: any) => {
+                        const p = gp.participant;
+                        const isActive = systemState?.activeParticipantId === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => forceStateChange('set_active_participant', {
+                              participantId: p.id,
+                              participantName: `${p.name} (${cat.name})`,
+                              roundId: cat.rounds[0].id
+                            })}
+                            className={`p-3 rounded flex items-center justify-between transition-all ${
+                              isActive 
+                                ? 'bg-primary text-white font-bold border border-red-500 shadow-lg shadow-primary/20 scale-105' 
+                                : 'bg-black text-gray-400 hover:bg-gray-900 border border-gray-800'
+                            }`}
+                          >
+                            <span className="truncate">{p.name}</span>
+                            {isActive && <span className="text-xs absolute -top-2 -right-2 bg-white text-black px-2 py-1 rounded-full animate-pulse">EN PISTA</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
