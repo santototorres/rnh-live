@@ -17,12 +17,19 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }} # O usar key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # Ir a la carpeta raíz por defecto o crearla si no existe (la primera vez fallará el git pull si no está clonado)
-            cd /root/rnh-live || (cd /root && git clone https://github.com/santototorres/rnh-live.git && cd rnh-live)
+            if [ ! -d "/root/rnh-live" ]; then
+              cd /root
+              git clone https://github.com/santototorres/rnh-live.git
+            fi
+            
+            cd /root/rnh-live
             git pull origin main
             
-            # Detener contenedores existentes
-            docker-compose down
-            
-            # Reconstruir y levantar con los nuevos cambios
-            docker-compose up -d --build
+            # Soporte cruzado para docker-compose (v1) o docker compose (v2)
+            if command -v docker-compose &> /dev/null; then
+              docker-compose down
+              docker-compose up -d --build
+            else
+              docker compose down
+              docker compose up -d --build
+            fi
