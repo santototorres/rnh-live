@@ -36,6 +36,7 @@ let globalState = {
   status: "setup", // setup, torneo_iniciado, grupo_activo, pasada_activa, pasada_cerrada, transicion
   activeParticipantId: null as string | null,
   activeParticipantName: "N/A" as string | null,
+  activeRoundId: null as string | null,
   consensusCount: 0
 };
 
