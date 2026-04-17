@@ -31,8 +31,8 @@ export const loginJudge = async (req: Request, res: Response) => {
       categoryId: judge.categoryId
     });
 
-  } catch (error) {
-    console.error("Error loginJudge:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+  } catch (error: any) {
+    console.error("Judge login error:", error);
+    res.status(500).json({ error: "Internal Server Error", detail: error.message || error.toString() });
   }
 };
