@@ -26,7 +26,10 @@ app.use(express.json());
 
 // Load Routers
 import adminRoutes from './routes/admin.routes';
+import judgeRoutes from './routes/judge.routes';
+
 app.use('/rnh/api/admin', adminRoutes);
+app.use('/rnh/api/judges', judgeRoutes);
 
 // In-Memory Global State (Simulates the DB state for fast Live Sync)
 let globalState = {
@@ -51,9 +54,35 @@ io.on('connection', (socket) => {
   });
 
   // Judge Events
-  socket.on('submit_score', (data) => {
-    console.log(`Puntaje Recibido: ${data.score} del socket ${socket.id}`);
-    // Save to DB here using prisma...
+  socket.on('submit_score', async (data) => {
+    console.log(`Puntaje Recibido: ${data.score} del juez: ${data.judgeId}`);
+    
+    if (!globalState.activeParticipantId || !globalState.activeRoundId || !data.judgeId) {
+      console.error("Faltan datos de estado para guardar puntuación en DB");
+      return;
+    }
+
+    try {
+      await prisma.score.upsert({
+        where: {
+          judgeId_participantId_roundId: {
+            judgeId: data.judgeId,
+            participantId: globalState.activeParticipantId,
+            roundId: globalState.activeRoundId
+          }
+        },
+        update: { value: data.score },
+        create: {
+          value: data.score,
+          judgeId: data.judgeId,
+          participantId: globalState.activeParticipantId,
+          roundId: globalState.activeRoundId
+        }
+      });
+      console.log("Score Upsert Guardado exitosamente");
+    } catch (e) {
+      console.error("Error guardando score DB:", e);
+    }
   });
 
   socket.on('judge_consensus_ready', () => {
@@ -68,13 +97,20 @@ io.on('connection', (socket) => {
   });
 
   // Admin Events
-  socket.on('admin_command', (data) => {
+  socket.on('admin_command', async (data) => {
     console.log(`Admin Cmd: ${data.action}`);
     if (data.action === 'start_tournament') {
       globalState.status = "torneo_iniciado";
     } else if (data.action === 'next_participant') {
       globalState.status = "pasada_activa";
-      globalState.activeParticipantName = "Skater Test " + Math.floor(Math.random() * 100);
+      
+      const firstPart = await prisma.participant.findFirst({ include: { category: true } });
+      const firstRound = await prisma.round.findFirst();
+
+      globalState.activeParticipantId = firstPart?.id || null;
+      globalState.activeParticipantName = firstPart ? `${firstPart.name} (${firstPart.category?.name})` : "Esperando Skaters...";
+      globalState.activeRoundId = firstRound?.id || null;
+      
       globalState.consensusCount = 0;
     } else if (data.action === 'force_close') {
       globalState.status = "pasada_cerrada";
