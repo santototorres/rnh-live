@@ -8,6 +8,9 @@ export default function AdminView() {
   const { socket, connected } = useSocket();
   const [systemState, setSystemState] = useState<any>(null);
 
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
+
   useEffect(() => {
     if (!socket) return;
     
@@ -22,9 +25,26 @@ export default function AdminView() {
     };
   }, [socket]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      Papa.parse(e.target.files[0], {
+  const handleSyncGoogleSheets = async () => {
+    setIsSyncing(true);
+    try {
+      // Intenta extraer el Document ID en caso de que pegaran toda la URL
+      let docId = sheetUrl;
+      const match = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
+      if (match && match[1]) {
+        docId = match[1];
+      }
+      
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`;
+
+      // Fetch the CSV text directly from Google Docs
+      const response = await fetch(csvUrl);
+      if (!response.ok) throw new Error("No se pudo descargar de Google Sheets. Verifica que el enlace sea 'Público/Cualquier persona con el enlace'");
+      
+      const csvText = await response.text();
+
+      // Pase the text via PapaParse
+      Papa.parse(csvText, {
         complete: async (results) => {
           try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/rnh/api";
@@ -43,11 +63,17 @@ export default function AdminView() {
           } catch (err) {
             console.error(err);
             alert("Error conectando con el servidor");
+          } finally {
+            setIsSyncing(false);
+            setSheetUrl("");
           }
         },
         header: true,
         skipEmptyLines: true,
       });
+    } catch (err: any) {
+      alert("Error general: " + err.message);
+      setIsSyncing(false);
     }
   };
 
@@ -96,19 +122,26 @@ export default function AdminView() {
         {/* Data Loading */}
         <div className="bg-background border border-border p-6 rounded-xl">
           <h2 className="text-xl font-bold text-white mb-6 uppercase border-l-4 border-primary pl-3">Participantes</h2>
-          <p className="text-gray-400 text-sm mb-4">Carga los participantes desde un archivo CSV. El archivo debe contener al menos las columnas "name", "alias", y "categoryId".</p>
+          <p className="text-gray-400 text-sm mb-4">Ingresa el enlace público de tu tabla de Google Sheets. Estaremos usando su exportación directa sin API complejas.</p>
           
-          <input 
-             type="file" 
-             accept=".csv"
-             onChange={handleFileUpload}
-             className="block w-full text-sm text-gray-400
-                        file:mr-4 file:py-2 file:px-4
-                        file:rounded-full file:border-0
-                        file:text-sm file:font-bold
-                        file:bg-surface file:text-white
-                        hover:file:bg-primary-hover hover:file:text-white transition-colors cursor-pointer"
-          />
+          <div className="flex flex-col gap-3">
+            <input 
+               type="text" 
+               placeholder="https://docs.google.com/spreadsheets/d/..."
+               value={sheetUrl}
+               onChange={(e) => setSheetUrl(e.target.value)}
+               className="w-full bg-surface border border-border rounded-lg p-3 text-white focus:border-primary focus:outline-none"
+            />
+            <button 
+              onClick={handleSyncGoogleSheets} 
+              disabled={isSyncing || !sheetUrl}
+              className={`font-bold p-3 rounded-lg transition-colors ${
+                isSyncing || !sheetUrl ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary-hover'
+              }`}
+            >
+              {isSyncing ? "Sincronizando..." : "Sincronizar desde Google Sheets"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
