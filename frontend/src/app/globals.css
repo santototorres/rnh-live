@@ -12,6 +12,9 @@
   --color-surface-hover: #1f1f1f;
   
   --color-border: #333333;
+  
+  --font-title: 'Big Shoulders', sans-serif;
+  --font-body: 'IBM Plex Mono', monospace;
 }
 
 @theme inline {
