@@ -64,7 +64,7 @@ export default function LiveView() {
 
       {/* Logo */}
       <div className="z-10 absolute top-6 left-6 text-left">
-        <img src="/logornh.png" alt="Roll Not Hate" className="h-14 md:h-20 object-contain drop-shadow-lg" />
+        <img src="/rnh/logornh.png" alt="Roll Not Hate" className="h-14 md:h-20 object-contain drop-shadow-lg" />
       </div>
 
       {/* Status bar */}
@@ -88,7 +88,7 @@ export default function LiveView() {
             className="flex flex-col items-center justify-center h-full z-10 p-8">
             <motion.div animate={{ opacity: [0.5, 1, 0.5], scale: [0.95, 1.05, 0.95] }} transition={{ repeat: Infinity, duration: 3 }}
               className="mb-8 flex items-center justify-center">
-              <img src="/logornh.png" alt="RNH Logo" className="w-48 md:w-64 h-auto object-contain drop-shadow-[0_0_30px_rgba(255,255,255,0.2)]" />
+              <img src="/rnh/logornh.png" alt="RNH Logo" className="w-48 md:w-64 h-auto object-contain drop-shadow-[0_0_30px_rgba(255,255,255,0.2)]" />
             </motion.div>
             <h1 className="text-5xl md:text-7xl font-black uppercase text-white tracking-widest mt-4">ROLL NOT HATE</h1>
             <p className="mt-6 text-xl text-gray-400 font-bold uppercase tracking-[0.3em]">Próximo roller en breve...</p>
