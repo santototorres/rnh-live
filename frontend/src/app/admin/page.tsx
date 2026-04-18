@@ -69,7 +69,7 @@ export default function AdminView() {
             });
             const data = await res.json();
             if (res.ok) {
-              alert(`✅ ${data.totalParticipants} skaters en ${data.totalGroups} Heats`);
+              alert(`✅ ${data.totalParticipants} rollers en ${data.totalGroups} Heats`);
               fetchStructure();
             } else alert(`Error: ${data.error}`);
           } catch { alert("Error de conexión"); }

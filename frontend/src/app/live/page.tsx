@@ -64,10 +64,7 @@ export default function LiveView() {
 
       {/* Logo */}
       <div className="z-10 absolute top-6 left-6 text-left">
-        <h1 className="text-2xl font-black tracking-tighter uppercase italic text-white">
-          ROLL <span className="text-primary">NOT</span> HATE
-        </h1>
-        <p className="text-primary font-mono text-xs tracking-widest mt-1">BROADCAST SYSTEM</p>
+        <img src="/logornh.png" alt="Roll Not Hate" className="h-14 md:h-20 object-contain drop-shadow-lg" />
       </div>
 
       {/* Status bar */}
@@ -89,12 +86,12 @@ export default function LiveView() {
           <motion.div key="standby"
             initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, y: -50 }}
             className="flex flex-col items-center justify-center h-full z-10 p-8">
-            <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }}
-              className="w-32 h-32 border-8 border-primary rounded-full flex items-center justify-center mb-10 shadow-[0_0_50px_rgba(255,45,45,0.4)]">
-              <span className="font-black text-5xl text-primary">RNH</span>
+            <motion.div animate={{ opacity: [0.5, 1, 0.5], scale: [0.95, 1.05, 0.95] }} transition={{ repeat: Infinity, duration: 3 }}
+              className="mb-8 flex items-center justify-center">
+              <img src="/logornh.png" alt="RNH Logo" className="w-48 md:w-64 h-auto object-contain drop-shadow-[0_0_30px_rgba(255,255,255,0.2)]" />
             </motion.div>
-            <h1 className="text-5xl md:text-7xl font-black uppercase text-white tracking-widest">Torneo Oficial</h1>
-            <p className="mt-6 text-xl text-gray-400 font-bold uppercase tracking-[0.3em]">Próximo skater en breve...</p>
+            <h1 className="text-5xl md:text-7xl font-black uppercase text-white tracking-widest mt-4">ROLL NOT HATE</h1>
+            <p className="mt-6 text-xl text-gray-400 font-bold uppercase tracking-[0.3em]">Próximo roller en breve...</p>
           </motion.div>
         )}
 
