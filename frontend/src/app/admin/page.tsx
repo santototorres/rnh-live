@@ -309,7 +309,7 @@ export default function AdminView() {
             {/* Participant selector */}
             {state?.status === "pasada_activa" && state?.groupParticipants?.length > 0 && (
               <section className="bg-background border border-border p-5 rounded-xl">
-                <h3 className="text-sm font-bold text-white uppercase mb-3">Participantes en Pista</h3>
+                <h3 className="text-sm font-bold text-white uppercase mb-3">Participantes en el Spot</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   {state.groupParticipants.map((p: any) => (
                     <button key={p.id} onClick={() => setActiveParticipant(p.id)}

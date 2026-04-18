@@ -105,7 +105,7 @@ export default function LiveView() {
             <div className="inline-block px-6 py-2 bg-primary/20 border-2 border-primary rounded-full mb-8 shadow-[0_0_30px_rgba(255,45,45,0.6)]">
               <span className="text-primary font-black uppercase tracking-[0.3em] flex items-center gap-3 text-xl">
                 <span className="w-3 h-3 bg-primary rounded-full animate-ping" />
-                EN LA PISTA
+                EN EL SPOT
               </span>
             </div>
             
@@ -113,7 +113,23 @@ export default function LiveView() {
               {state?.activeParticipantName || "..."}
             </h1>
             
-            <div className="flex gap-3">
+            {/* Animated Hueso */}
+            <motion.img 
+              src="/rnh/hueso.png" 
+              alt="Hueso" 
+              className="w-48 md:w-80 object-contain absolute bottom-[15%] z-[-1] opacity-60"
+              animate={{ 
+                y: [0, -30, 0], 
+                rotate: [-8, 8, -8],
+              }}
+              transition={{ 
+                duration: 6, 
+                repeat: Infinity, 
+                ease: "easeInOut" 
+              }}
+            />
+            
+            <div className="flex gap-3 mt-4">
               <motion.div initial={{ width: 0 }} animate={{ width: "180px" }} className="h-2 bg-white skew-x-[12deg] shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
               <motion.div initial={{ width: 0 }} animate={{ width: "90px" }} transition={{ delay: 0.2 }} className="h-2 bg-primary skew-x-[12deg] shadow-[0_0_10px_rgba(255,45,45,0.8)]" />
             </div>
