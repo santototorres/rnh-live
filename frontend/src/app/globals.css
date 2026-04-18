@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  /* RNH Base Colors */
-  --background: #0b0b0b;
+  /* RNH Base Colors - B&W / Grayscale Theme */
+  --background: #000000;
   --foreground: #ffffff;
   
-  --color-primary: #FF2D2D;
-  --color-primary-hover: #ff4d4d;
+  --color-primary: #e5e5e5;
+  --color-primary-hover: #ffffff;
   
-  --color-surface: #1a1a1a;
-  --color-surface-hover: #262626;
+  --color-surface: #121212;
+  --color-surface-hover: #1f1f1f;
   
   --color-border: #333333;
 }
@@ -23,8 +23,10 @@
   --color-surface-hover: var(--color-surface-hover);
   --color-border: var(--color-border);
   
-  --font-sans: "Inter", Arial, Helvetica, sans-serif;
-  --font-mono: ui-monospace, monospace;
+  /* Map CSS variables to Tailwind font families */
+  --font-title: var(--font-title);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-body);
 }
 
 body {
@@ -34,7 +36,13 @@ body {
   overscroll-behavior: none; /* Good for arcade/live broadcast apps */
 }
 
+/* Typography Overrides */
+h1, h2, h3, h4, h5, h6, .font-title {
+  font-family: var(--font-title);
+  text-transform: uppercase;
+}
+
 /* Base custom interactive styles */
 .rnh-button {
-  @apply bg-primary text-white font-bold uppercase tracking-wider transition-colors hover:bg-primary-hover active:scale-95 flex items-center justify-center;
+  @apply bg-primary text-black font-bold uppercase tracking-wider transition-colors hover:bg-primary-hover active:scale-95 flex items-center justify-center;
 }

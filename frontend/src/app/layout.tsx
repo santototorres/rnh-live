@@ -1,8 +1,19 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Big_Shoulders_Text, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const bigShoulders = Big_Shoulders_Text({ 
+  subsets: ["latin"], 
+  variable: "--font-title",
+  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"]
+});
+
+const ibmPlex = IBM_Plex_Mono({ 
+  subsets: ["latin"], 
+  variable: "--font-body",
+  weight: ["100", "200", "300", "400", "500", "600", "700"],
+  style: ["normal", "italic"]
+});
 
 import { SocketProvider } from "@/components/SocketProvider";
 
@@ -17,8 +28,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${inter.variable} h-full antialiased dark`}>
-      <body className="min-h-full flex flex-col">
+    <html lang="es" className={`${bigShoulders.variable} ${ibmPlex.variable} h-full antialiased dark`}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
+      <body className="min-h-full flex flex-col font-sans">
         <SocketProvider>{children}</SocketProvider>
       </body>
     </html>
