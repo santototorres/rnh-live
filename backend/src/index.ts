@@ -185,8 +185,9 @@ io.on('connection', (socket) => {
         score: data.score,
         pasadaNumber: state.activePasadaNumber
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error saving score:", e);
+      socket.emit('score_error', { message: "Error al guardar el puntaje. Si el admin reinició el sistema, sal y vuelve a iniciar sesión con tu PIN." });
     }
   });
 

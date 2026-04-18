@@ -61,11 +61,16 @@ export default function JudgeView() {
       // Force re-render for consensus UI
     });
 
+    socket.on("score_error", (data) => {
+      alert(data.message);
+    });
+
     return () => {
       socket.off("state_update");
       socket.off("pasada_results");
       socket.off("group_results");
       socket.off("consensus_progress");
+      socket.off("score_error");
     };
   }, [socket, judge]);
 

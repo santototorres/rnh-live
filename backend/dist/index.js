@@ -122,24 +122,31 @@ io.on('connection', (socket) => {
             return;
         }
         try {
-            await db_1.default.score.upsert({
+            const existingScore = await db_1.default.score.findFirst({
                 where: {
-                    judgeId_participantId_roundId_pasadaNumber: {
-                        judgeId: data.judgeId,
-                        participantId: data.participantId,
-                        roundId: state.activeRoundId,
-                        pasadaNumber: state.activePasadaNumber
-                    }
-                },
-                update: { value: data.score },
-                create: {
-                    value: data.score,
                     judgeId: data.judgeId,
                     participantId: data.participantId,
                     roundId: state.activeRoundId,
                     pasadaNumber: state.activePasadaNumber
                 }
             });
+            if (existingScore) {
+                await db_1.default.score.update({
+                    where: { id: existingScore.id },
+                    data: { value: data.score }
+                });
+            }
+            else {
+                await db_1.default.score.create({
+                    data: {
+                        value: data.score,
+                        judgeId: data.judgeId,
+                        participantId: data.participantId,
+                        roundId: state.activeRoundId,
+                        pasadaNumber: state.activePasadaNumber
+                    }
+                });
+            }
             console.log(`Score: Juez ${data.judgeId} → Participante ${data.participantId} = ${data.score} (Pasada ${state.activePasadaNumber})`);
             // Notify all clients about the score update  
             io.emit('score_submitted', {
@@ -385,24 +392,31 @@ io.on('connection', (socket) => {
     // ── ADMIN: Edit score (post-pasada) ──
     socket.on('admin_edit_score', async (data) => {
         try {
-            await db_1.default.score.upsert({
+            const existingAdminScore = await db_1.default.score.findFirst({
                 where: {
-                    judgeId_participantId_roundId_pasadaNumber: {
-                        judgeId: data.judgeId,
-                        participantId: data.participantId,
-                        roundId: data.roundId,
-                        pasadaNumber: data.pasadaNumber
-                    }
-                },
-                update: { value: data.value },
-                create: {
                     judgeId: data.judgeId,
                     participantId: data.participantId,
                     roundId: data.roundId,
-                    pasadaNumber: data.pasadaNumber,
-                    value: data.value
+                    pasadaNumber: data.pasadaNumber
                 }
             });
+            if (existingAdminScore) {
+                await db_1.default.score.update({
+                    where: { id: existingAdminScore.id },
+                    data: { value: data.value }
+                });
+            }
+            else {
+                await db_1.default.score.create({
+                    data: {
+                        judgeId: data.judgeId,
+                        participantId: data.participantId,
+                        roundId: data.roundId,
+                        pasadaNumber: data.pasadaNumber,
+                        value: data.value
+                    }
+                });
+            }
             console.log(`Admin editó score: Juez ${data.judgeId}, Participante ${data.participantId} = ${data.value}`);
             io.emit('score_edited', data);
         }
