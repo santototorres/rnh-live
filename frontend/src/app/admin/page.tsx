@@ -274,6 +274,11 @@ export default function AdminView() {
           })}
         </div>
         <div className="p-3 border-t border-border flex flex-col gap-2">
+          {activeCat && (
+            <button onClick={() => resetCategory(activeCat.id)} className="w-full text-xs text-orange-500 hover:bg-orange-500/10 p-2 rounded font-bold transition-colors">
+              🔄 Reiniciar {activeCat.name}
+            </button>
+          )}
           <button onClick={resetTournament} className="w-full text-xs text-red-500 hover:bg-red-500/10 p-2 rounded font-bold transition-colors">
             🗑 Reiniciar Todo El Torneo
           </button>
@@ -330,10 +335,16 @@ export default function AdminView() {
               <section className="bg-background border border-border rounded-xl p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-bold text-gray-400 uppercase">① Parametrización</h3>
-                  <button onClick={() => saveParams(activeCat.id)}
-                    className="bg-blue-600 text-white font-bold px-5 py-2 rounded-lg hover:bg-blue-500 text-xs uppercase tracking-wider transition-colors">
-                    💾 Guardar Parámetros
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => resetCategory(activeCat.id)}
+                      className="bg-red-500/20 text-red-400 border border-red-500/50 font-bold px-4 py-2 rounded-lg hover:bg-red-500 hover:text-white text-xs uppercase tracking-wider transition-colors">
+                      🔄 Reiniciar Categoría
+                    </button>
+                    <button onClick={() => saveParams(activeCat.id)}
+                      className="bg-blue-600 text-white font-bold px-5 py-2 rounded-lg hover:bg-blue-500 text-xs uppercase tracking-wider transition-colors">
+                      💾 Guardar Parámetros
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="bg-surface p-4 rounded-lg text-center">
