@@ -8,8 +8,8 @@ export default function AdminView() {
   const { socket, connected } = useSocket();
   const [state, setState] = useState<any>(null);
   const [structure, setStructure] = useState<any>(null);
+  const [sheetUrl, setSheetUrl] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Judge creation
   const [newJudgeName, setNewJudgeName] = useState("");
@@ -73,45 +73,37 @@ export default function AdminView() {
     };
   }, [socket]);
 
-  // ── CSV File Upload ──
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // ── Google Sheets Sync ──
+  const handleSync = async () => {
+    if (!sheetUrl) return;
     setIsSyncing(true);
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        try {
-          const res = await fetch(`${apiUrl}/admin/upload`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ participants: results.data })
-          });
-          
-          const textResponse = await res.text();
-          let data;
-          try {
-            data = JSON.parse(textResponse);
-          } catch(err) {
-            throw new Error("El servidor devolvió un error JSON inválido. Revisa la conexión al backend o logs.");
-          }
-
-          if (res.ok) {
-            alert(`✅ ${data.totalParticipants} rollers importados. Se formaron ${data.totalGroups} Grupos.`);
-            fetchStructure();
-          } else {
-            alert(`Error: ${data.error}`);
-          }
-        } catch (err: any) {
-          alert("Error subiendo archivo: " + err.message);
-        } finally {
-          setIsSyncing(false);
-          if (fileInputRef.current) fileInputRef.current.value = "";
-        }
+    try {
+      const res = await fetch(`${apiUrl}/admin/upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetUrl })
+      });
+      
+      const textResponse = await res.text();
+      let data;
+      try {
+        data = JSON.parse(textResponse);
+      } catch(e) {
+        throw new Error("Respuesta inválida del servidor: " + textResponse.substring(0, 50));
       }
-    });
+
+      if (res.ok) {
+        alert(`✅ ${data.totalParticipants} rollers en ${data.totalGroups} Grupos`);
+        fetchStructure();
+      } else {
+        alert(`Error: ${data.error || 'Desconocido'}`);
+      }
+    } catch (err: any) {
+      alert("Error de conexión: " + err.message);
+    } finally {
+      setIsSyncing(false);
+      setSheetUrl("");
+    }
   };
 
   // ── Save ALL params at once ──
@@ -254,12 +246,14 @@ export default function AdminView() {
 
         {/* Sync */}
         <div className="p-3 border-b border-border">
-          <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Importar Participantes CSV</label>
-          <div className="flex gap-2 mt-1">
-            <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" id="csvFile" />
-            <label htmlFor="csvFile" className={`flex-1 bg-surface border border-border rounded px-3 py-2 text-white text-[11px] text-center cursor-pointer hover:bg-gray-800 transition ${isSyncing ? "opacity-50 pointer-events-none" : ""}`}>
-              {isSyncing ? "Procesando..." : "📂 Subir Archivo CSV"}
-            </label>
+          <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Importar (Publicado Web)</label>
+          <div className="flex gap-1">
+            <input type="text" placeholder="URL web de Google Sheets..." value={sheetUrl} onChange={e => setSheetUrl(e.target.value)}
+              className="flex-1 bg-surface border border-border rounded px-2 py-1.5 text-white text-[11px] focus:border-primary focus:outline-none" />
+            <button onClick={handleSync} disabled={isSyncing || !sheetUrl}
+              className="bg-primary text-white font-bold px-2 rounded text-[11px] disabled:opacity-50">
+              {isSyncing ? "..." : "⬆"}
+            </button>
           </div>
         </div>
 

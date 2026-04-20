@@ -9,11 +9,13 @@ export const uploadParticipantsUrl = async (req: Request, res: Response) => {
     const { sheetUrl, groupSize = 4 } = req.body;
     if (!sheetUrl) return res.status(400).json({ error: "URL inválida" });
 
-    let docId = sheetUrl;
-    const match = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
-    if (match?.[1]) docId = match[1];
-    
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`;
+    let csvUrl = sheetUrl;
+    if (!sheetUrl.includes('/pub?')) {
+      let docId = sheetUrl;
+      const match = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
+      if (match?.[1]) docId = match[1];
+      csvUrl = `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`;
+    }
     const response = await fetch(csvUrl);
     if (!response.ok) {
       return res.status(400).json({ error: "No se pudo descargar. Verifica que el enlace a la hoja de cálculo sea público (Cualquier persona con el enlace)." });
