@@ -141,12 +141,16 @@ export const uploadParticipants = async (req: Request, res: Response) => {
       tournament = await prisma.tournament.create({
         data: { name: "RNH Live Event", status: "setup" }
       });
+      const fixedCategories = ["Mujeres Pro", "Hombres Amateur", "Hombres Pro", "Rollerskate", "Mujeres Amateur", "Junior"];
+      for (const catName of fixedCategories) {
+        await prisma.category.create({ data: { name: catName, tournamentId: tournament.id, groupSize: 4 } });
+      }
     }
 
     // 2. Group participants by their "Categoria" column
     const participantsByCategory: Record<string, any[]> = {};
     for (const p of participants) {
-      const catName = p.Categoria || "Open";
+      const catName = p.Categoria || p.categoria || p.category || "Open";
       if (!participantsByCategory[catName]) participantsByCategory[catName] = [];
       participantsByCategory[catName].push(p);
     }
@@ -154,11 +158,11 @@ export const uploadParticipants = async (req: Request, res: Response) => {
     let totalGroups = 0;
     let totalParticipants = 0;
 
+    const categories = await prisma.category.findMany({ where: { tournamentId: tournament.id } });
+
     // 3. Process each Category
     for (const [catName, catParticipants] of Object.entries(participantsByCategory)) {
-      let category = await prisma.category.findFirst({ 
-        where: { tournamentId: tournament.id, name: catName } 
-      });
+      let category = categories.find(c => c.name.toLowerCase().trim() === catName.toLowerCase().trim());
       
       if (!category) {
         category = await prisma.category.create({
