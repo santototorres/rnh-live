@@ -174,7 +174,7 @@ async function generateNextRound(categoryId, qualifiedParticipantIds) {
     for (let i = 0; i < chunks.length; i++) {
         const group = await db_1.default.group.create({
             data: {
-                name: `Heat ${i + 1}`,
+                name: `Grupo ${i + 1}`,
                 roundId: round.id
             }
         });

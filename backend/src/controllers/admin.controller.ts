@@ -101,23 +101,23 @@ export const uploadParticipants = async (req: Request, res: Response) => {
 
 export const randomizeGroups = async (req: Request, res: Response) => {
   try {
-    const { categoryId } = req.params;
+    const categoryId = req.params.categoryId as string;
     const category = await prisma.category.findUnique({ where: { id: categoryId } });
     if (!category) return res.status(404).json({ error: "No category found" });
 
     const round1 = await prisma.round.findFirst({ 
-      where: { categoryId, number: 1 }, 
+      where: { categoryId: categoryId, number: 1 }, 
       include: { groups: { include: { participants: true } } } 
-    });
+    }) as any;
     
     if (round1) {
-      const participantIds = round1.groups.flatMap(g => g.participants.map(p => p.participantId));
+      const participantIds = round1.groups.flatMap((g: any) => g.participants.map((p: any) => p.participantId));
       
       await prisma.groupParticipant.deleteMany({ where: { group: { roundId: round1.id } } });
       await prisma.group.deleteMany({ where: { roundId: round1.id } });
       
       const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
-      const chunks = [];
+      const chunks: string[][] = [];
       for (let i = 0; i < shuffled.length; i += category.groupSize) {
         chunks.push(shuffled.slice(i, i + category.groupSize));
       }
@@ -126,7 +126,7 @@ export const randomizeGroups = async (req: Request, res: Response) => {
         const group = await prisma.group.create({
           data: { name: `Grupo ${i + 1}`, roundId: round1.id }
         });
-        await Promise.all(chunks[i].map((pid, index) =>
+        await Promise.all(chunks[i].map((pid: string, index: number) =>
           prisma.groupParticipant.create({
             data: { groupId: group.id, participantId: pid, order: index + 1 }
           })
@@ -201,15 +201,15 @@ export const updateCategory = async (req: Request, res: Response) => {
         const round1 = await prisma.round.findFirst({ 
           where: { categoryId: updated.id, number: 1 }, 
           include: { groups: { include: { participants: true } } } 
-        });
+        }) as any;
         if (round1) {
-          const participantIds = round1.groups.flatMap(g => g.participants.map(p => p.participantId));
+          const participantIds = round1.groups.flatMap((g: any) => g.participants.map((p: any) => p.participantId));
           
           await prisma.groupParticipant.deleteMany({ where: { group: { roundId: round1.id } } });
           await prisma.group.deleteMany({ where: { roundId: round1.id } });
           
           const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
-          const chunks = [];
+          const chunks: string[][] = [];
           for (let i = 0; i < shuffled.length; i += updated.groupSize) {
             chunks.push(shuffled.slice(i, i + updated.groupSize));
           }
@@ -218,7 +218,7 @@ export const updateCategory = async (req: Request, res: Response) => {
             const group = await prisma.group.create({
               data: { name: `Grupo ${i + 1}`, roundId: round1.id }
             });
-            await Promise.all(chunks[i].map((pid, index) =>
+            await Promise.all(chunks[i].map((pid: string, index: number) =>
               prisma.groupParticipant.create({
                 data: { groupId: group.id, participantId: pid, order: index + 1 }
               })

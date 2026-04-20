@@ -9,5 +9,6 @@ router.put('/category/:id', admin_controller_1.updateCategory);
 router.post('/judges', admin_controller_1.createJudge);
 router.get('/judges', admin_controller_1.getJudges);
 router.delete('/judges/:id', admin_controller_1.deleteJudge);
+router.post('/category/:categoryId/randomize', admin_controller_1.randomizeGroups);
 router.post('/reset', admin_controller_1.resetTournament);
 exports.default = router;

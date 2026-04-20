@@ -158,6 +158,7 @@ io.on('connection', (socket) => {
         }
         catch (e) {
             console.error("Error saving score:", e);
+            socket.emit('score_error', { message: "Error al guardar el puntaje. Si el admin reinició el sistema, sal y vuelve a iniciar sesión con tu PIN." });
         }
     });
     // ── JUDGE: End pasada (consensus) ──

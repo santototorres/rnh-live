@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resetTournament = exports.deleteJudge = exports.getJudges = exports.createJudge = exports.updateCategory = exports.getStructure = exports.uploadParticipants = void 0;
+exports.resetTournament = exports.deleteJudge = exports.getJudges = exports.createJudge = exports.updateCategory = exports.getStructure = exports.randomizeGroups = exports.uploadParticipants = void 0;
 const db_1 = __importDefault(require("../db"));
 // ─── Upload Participants from Google Sheets CSV ───
 const uploadParticipants = async (req, res) => {
@@ -62,7 +62,7 @@ const uploadParticipants = async (req, res) => {
             }
             for (let i = 0; i < chunks.length; i++) {
                 const group = await db_1.default.group.create({
-                    data: { name: `Heat ${i + 1}`, roundId: round1.id }
+                    data: { name: `Grupo ${i + 1}`, roundId: round1.id }
                 });
                 await Promise.all(chunks[i].map((p, index) => db_1.default.groupParticipant.create({
                     data: { groupId: group.id, participantId: p.id, order: index + 1 }
@@ -83,6 +83,43 @@ const uploadParticipants = async (req, res) => {
     }
 };
 exports.uploadParticipants = uploadParticipants;
+// ─── Randomize Groups ───
+const randomizeGroups = async (req, res) => {
+    try {
+        const categoryId = req.params.categoryId;
+        const category = await db_1.default.category.findUnique({ where: { id: categoryId } });
+        if (!category)
+            return res.status(404).json({ error: "No category found" });
+        const round1 = await db_1.default.round.findFirst({
+            where: { categoryId: categoryId, number: 1 },
+            include: { groups: { include: { participants: true } } }
+        });
+        if (round1) {
+            const participantIds = round1.groups.flatMap((g) => g.participants.map((p) => p.participantId));
+            await db_1.default.groupParticipant.deleteMany({ where: { group: { roundId: round1.id } } });
+            await db_1.default.group.deleteMany({ where: { roundId: round1.id } });
+            const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
+            const chunks = [];
+            for (let i = 0; i < shuffled.length; i += category.groupSize) {
+                chunks.push(shuffled.slice(i, i + category.groupSize));
+            }
+            for (let i = 0; i < chunks.length; i++) {
+                const group = await db_1.default.group.create({
+                    data: { name: `Grupo ${i + 1}`, roundId: round1.id }
+                });
+                await Promise.all(chunks[i].map((pid, index) => db_1.default.groupParticipant.create({
+                    data: { groupId: group.id, participantId: pid, order: index + 1 }
+                })));
+            }
+        }
+        res.status(200).json({ message: "Grupos mezclados aleatoriamente." });
+    }
+    catch (error) {
+        console.error("Error randomizeGroups:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+exports.randomizeGroups = randomizeGroups;
 // ─── Get Full Tournament Structure ───
 const getStructure = async (_req, res) => {
     try {
@@ -134,6 +171,33 @@ const updateCategory = async (req, res) => {
                 ...(judgesCount !== undefined && { judgesCount })
             }
         });
+        if (groupSize !== undefined) {
+            const tournament = await db_1.default.tournament.findUnique({ where: { id: updated.tournamentId } });
+            if (tournament?.status === 'setup') {
+                const round1 = await db_1.default.round.findFirst({
+                    where: { categoryId: updated.id, number: 1 },
+                    include: { groups: { include: { participants: true } } }
+                });
+                if (round1) {
+                    const participantIds = round1.groups.flatMap((g) => g.participants.map((p) => p.participantId));
+                    await db_1.default.groupParticipant.deleteMany({ where: { group: { roundId: round1.id } } });
+                    await db_1.default.group.deleteMany({ where: { roundId: round1.id } });
+                    const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
+                    const chunks = [];
+                    for (let i = 0; i < shuffled.length; i += updated.groupSize) {
+                        chunks.push(shuffled.slice(i, i + updated.groupSize));
+                    }
+                    for (let i = 0; i < chunks.length; i++) {
+                        const group = await db_1.default.group.create({
+                            data: { name: `Grupo ${i + 1}`, roundId: round1.id }
+                        });
+                        await Promise.all(chunks[i].map((pid, index) => db_1.default.groupParticipant.create({
+                            data: { groupId: group.id, participantId: pid, order: index + 1 }
+                        })));
+                    }
+                }
+            }
+        }
         res.status(200).json(updated);
     }
     catch (error) {
