@@ -273,10 +273,14 @@ export default function AdminView() {
             );
           })}
         </div>
-
-        <div className="p-3 border-t border-border">
+        <div className="p-3 border-t border-border flex flex-col gap-2">
+          {activeCat && (
+            <button onClick={() => resetCategory(activeCat.id)} className="w-full text-xs text-orange-500 hover:bg-orange-500/10 p-2 rounded font-bold transition-colors">
+              🔄 Reiniciar {activeCat.name}
+            </button>
+          )}
           <button onClick={resetTournament} className="w-full text-xs text-red-500 hover:bg-red-500/10 p-2 rounded font-bold transition-colors">
-            🗑 Reiniciar Todo
+            🗑 Reiniciar Todo El Torneo
           </button>
         </div>
       </aside>
@@ -318,10 +322,6 @@ export default function AdminView() {
                       ● EN VIVO
                     </div>
                   )}
-                  <button onClick={() => resetCategory(activeCat.id)}
-                    className="bg-red-500/10 text-red-500 border border-red-500/30 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white transition-colors">
-                    🔄 Reiniciar Categoría
-                  </button>
                 </div>
               </div>
 
