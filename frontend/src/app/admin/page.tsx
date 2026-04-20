@@ -442,33 +442,97 @@ export default function AdminView() {
 
                   {classification && (
                     <div className="border-t border-border pt-4">
-                      <h4 className="text-xs text-green-400 font-bold uppercase mb-2">
-                        Clasificación (Top {Math.round(classification.qualifyPercent * 100)}%)
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                        <div>
-                          <span className="text-[10px] text-green-400 font-bold block mb-1">✅ Clasificados ({classification.qualified?.length})</span>
-                          {classification.qualified?.map((r: any) => (
-                            <div key={r.participantId} className="flex justify-between py-1 text-xs">
-                              <span className="text-green-300">#{r.globalPosition} {r.name}</span>
-                              <span className="text-white font-bold">{r.totalScore}</span>
-                            </div>
-                          ))}
+                      {classification.roundNumber >= 2 ? (
+                        /* ── PODIO FINAL ── */
+                        <div className="text-center">
+                          <h4 className="text-2xl font-black text-white uppercase mb-6">🏆 Podio Final — {classification.categoryName}</h4>
+                          
+                          {/* Top 3 Podium */}
+                          <div className="flex justify-center items-end gap-3 mb-6">
+                            {/* 2nd place */}
+                            {classification.qualified?.[1] && (
+                              <div className="flex flex-col items-center">
+                                <span className="text-3xl mb-2">🥈</span>
+                                <div className="bg-gray-500/20 border-2 border-gray-400 rounded-xl p-3 w-28">
+                                  <span className="text-white font-black text-sm block">{classification.qualified[1].name}</span>
+                                  <span className="text-gray-400 text-xs font-bold">{classification.qualified[1].totalScore} pts</span>
+                                </div>
+                                <div className="bg-gray-600 w-28 h-16 rounded-b-lg flex items-center justify-center">
+                                  <span className="text-white font-black text-2xl">2°</span>
+                                </div>
+                              </div>
+                            )}
+                            {/* 1st place */}
+                            {classification.qualified?.[0] && (
+                              <div className="flex flex-col items-center">
+                                <span className="text-4xl mb-2">🥇</span>
+                                <div className="bg-yellow-500/20 border-2 border-yellow-500 rounded-xl p-3 w-32 shadow-lg shadow-yellow-500/20">
+                                  <span className="text-white font-black text-base block">{classification.qualified[0].name}</span>
+                                  <span className="text-yellow-400 text-xs font-bold">{classification.qualified[0].totalScore} pts</span>
+                                </div>
+                                <div className="bg-yellow-600 w-32 h-24 rounded-b-lg flex items-center justify-center">
+                                  <span className="text-white font-black text-3xl">1°</span>
+                                </div>
+                              </div>
+                            )}
+                            {/* 3rd place */}
+                            {classification.qualified?.[2] && (
+                              <div className="flex flex-col items-center">
+                                <span className="text-3xl mb-2">🥉</span>
+                                <div className="bg-orange-500/20 border-2 border-orange-600 rounded-xl p-3 w-28">
+                                  <span className="text-white font-black text-sm block">{classification.qualified[2].name}</span>
+                                  <span className="text-orange-400 text-xs font-bold">{classification.qualified[2].totalScore} pts</span>
+                                </div>
+                                <div className="bg-orange-700 w-28 h-12 rounded-b-lg flex items-center justify-center">
+                                  <span className="text-white font-black text-2xl">3°</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Rest of participants */}
+                          <div className="text-left mt-4">
+                            <h5 className="text-[10px] text-gray-500 font-bold uppercase mb-2">Ranking Completo</h5>
+                            {[...classification.qualified, ...classification.eliminated]?.map((r: any, i: number) => (
+                              <div key={r.participantId} className={`flex justify-between py-1.5 text-xs border-b border-border/50 last:border-0 ${i < 3 ? 'text-yellow-300' : 'text-gray-400'}`}>
+                                <span>#{r.globalPosition} {r.name}</span>
+                                <span className="text-white font-bold">{r.totalScore} pts</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-[10px] text-red-400 font-bold block mb-1">❌ Eliminados ({classification.eliminated?.length})</span>
-                          {classification.eliminated?.map((r: any) => (
-                            <div key={r.participantId} className="flex justify-between py-1 text-xs">
-                              <span className="text-red-300/50">#{r.globalPosition} {r.name}</span>
-                              <span className="text-gray-500">{r.totalScore}</span>
+                      ) : (
+                        /* ── CLASIFICACIÓN RONDA 1 ── */
+                        <>
+                          <h4 className="text-xs text-green-400 font-bold uppercase mb-2">
+                            Clasificación (Top {Math.round(classification.qualifyPercent * 100)}%)
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <span className="text-[10px] text-green-400 font-bold block mb-1">✅ Clasificados ({classification.qualified?.length})</span>
+                              {classification.qualified?.map((r: any) => (
+                                <div key={r.participantId} className="flex justify-between py-1 text-xs">
+                                  <span className="text-green-300">#{r.globalPosition} {r.name}</span>
+                                  <span className="text-white font-bold">{r.totalScore}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                      <button onClick={() => generateNextRound(classification.qualified.map((q: any) => q.participantId))}
-                        className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-500 uppercase text-sm">
-                        🏆 Inicio de Finales →
-                      </button>
+                            <div>
+                              <span className="text-[10px] text-red-400 font-bold block mb-1">❌ Eliminados ({classification.eliminated?.length})</span>
+                              {classification.eliminated?.map((r: any) => (
+                                <div key={r.participantId} className="flex justify-between py-1 text-xs">
+                                  <span className="text-red-300/50">#{r.globalPosition} {r.name}</span>
+                                  <span className="text-gray-500">{r.totalScore}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <button onClick={() => generateNextRound(classification.qualified.map((q: any) => q.participantId))}
+                            className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-500 uppercase text-sm">
+                            🏆 Inicio de Finales →
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </section>

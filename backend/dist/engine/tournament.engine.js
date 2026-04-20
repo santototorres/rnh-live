@@ -145,7 +145,9 @@ async function calculateRoundClassification(roundId, categoryId) {
         eliminated: eliminated.map((p, i) => ({ ...p, globalPosition: qualifyCount + i + 1 })),
         qualifyPercent: category.qualifyPercent,
         qualifyCount,
-        totalParticipants: allParticipants.length
+        totalParticipants: allParticipants.length,
+        roundNumber: round.number,
+        categoryName: category.name
     };
 }
 /**

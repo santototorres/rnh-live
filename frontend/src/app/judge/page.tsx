@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function JudgeView() {
   const { socket, connected } = useSocket();
   const [state, setState] = useState<any>(null);
-  const [scores, setScores] = useState<Record<string, number>>({});
+  const [scores, setScores] = useState<Record<string, number | null>>({});
   
   // Auth
   const [judge, setJudge] = useState<any>(null);
@@ -24,6 +24,9 @@ export default function JudgeView() {
   const [pasadaResults, setPasadaResults] = useState<any>(null);
   const [groupResults, setGroupResults] = useState<any>(null);
 
+  // Live rankings from score_submitted events
+  const [liveScores, setLiveScores] = useState<any[]>([]);
+
   useEffect(() => {
     const stored = localStorage.getItem("rnh_judge");
     if (stored) setJudge(JSON.parse(stored));
@@ -35,11 +38,21 @@ export default function JudgeView() {
     socket.emit("request_state");
 
     socket.on("state_update", (newState) => {
+      const prevStatus = state?.status;
+      const prevPasada = state?.activePasadaNumber;
+      const prevGroup = state?.activeGroupId;
+
       setState(newState);
-      // Reset consensus buttons on state transitions
-      if (newState.status === "pasada_activa") {
+
+      // Reset scores when pasada or group changes
+      if (
+        newState.status === "pasada_activa" && 
+        (prevStatus !== "pasada_activa" || prevPasada !== newState.activePasadaNumber || prevGroup !== newState.activeGroupId)
+      ) {
+        setScores({});
         setMyEndPasada(false);
         setPasadaResults(null);
+        setLiveScores([]);
       }
       if (newState.status === "pasada_cerrada") {
         setMyNextPasada(false);
@@ -57,6 +70,20 @@ export default function JudgeView() {
       setGroupResults(data);
     });
 
+    socket.on("score_submitted", (data) => {
+      setLiveScores(prev => {
+        const existing = prev.find(s => s.judgeId === data.judgeId && s.participantId === data.participantId);
+        if (existing) {
+          return prev.map(s => 
+            s.judgeId === data.judgeId && s.participantId === data.participantId 
+              ? { ...s, score: data.score } 
+              : s
+          );
+        }
+        return [...prev, data];
+      });
+    });
+
     socket.on("consensus_progress", (data) => {
       // Force re-render for consensus UI
     });
@@ -69,6 +96,7 @@ export default function JudgeView() {
       socket.off("state_update");
       socket.off("pasada_results");
       socket.off("group_results");
+      socket.off("score_submitted");
       socket.off("consensus_progress");
       socket.off("score_error");
     };
@@ -132,6 +160,24 @@ export default function JudgeView() {
     socket.emit("judge_next_group", { judgeId: judge.id });
   };
 
+  // ── Compute live ranking from liveScores ──
+  const computeLiveRanking = () => {
+    const participants = state?.groupParticipants || [];
+    const byParticipant: Record<string, { name: string; total: number; count: number }> = {};
+    for (const p of participants) {
+      byParticipant[p.id] = { name: p.name, total: 0, count: 0 };
+    }
+    for (const s of liveScores) {
+      if (byParticipant[s.participantId]) {
+        byParticipant[s.participantId].total += s.score;
+        byParticipant[s.participantId].count += 1;
+      }
+    }
+    return Object.entries(byParticipant)
+      .map(([id, data]) => ({ id, ...data, avg: data.count > 0 ? (data.total / data.count).toFixed(1) : '—' }))
+      .sort((a, b) => b.total - a.total);
+  };
+
   // ─────────── LOGIN SCREEN ───────────
   if (!judge) {
     return (
@@ -173,6 +219,7 @@ export default function JudgeView() {
   const consensusEnd = state?.consensus?.endPasada || [];
   const consensusNext = state?.consensus?.nextPasada || [];
   const consensusGroup = state?.consensus?.nextGroup || [];
+  const liveRanking = computeLiveRanking();
 
   return (
     <div className="flex-1 flex flex-col p-4 bg-background min-h-screen">
@@ -199,7 +246,7 @@ export default function JudgeView() {
       {/* ── PASADA ACTIVA: Scoring ── */}
       {isPasadaActiva && (
         <div className="flex-1 flex flex-col gap-3 overflow-auto">
-          <h3 className="text-white font-bold uppercase text-sm tracking-wider mb-1">Califica a cada participante:</h3>
+          <h3 className="text-white font-bold uppercase text-sm tracking-wider mb-1">Califica de 0 a 10:</h3>
           
           {participants.map((p: any) => {
             const isActive = state?.activeParticipantId === p.id;
@@ -211,20 +258,20 @@ export default function JudgeView() {
                     {isActive && <span className="text-primary mr-2">▶</span>}
                     {p.name}
                   </span>
-                  {currentScore && (
+                  {currentScore !== null && currentScore !== undefined && (
                     <span className="text-primary font-black text-xl">{currentScore}</span>
                   )}
                 </div>
-                <div className="grid grid-cols-5 gap-2">
-                  {[1, 2, 3, 4, 5].map((val) => (
+                <div className="grid grid-cols-11 gap-1">
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => (
                     <motion.button
                       key={val}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => handleScore(p.id, val)}
-                      className={`py-3 rounded-lg text-lg font-black transition-all border-b-4 ${
+                      className={`py-2.5 rounded-lg text-sm font-black transition-all ${
                         currentScore === val 
-                          ? 'bg-white text-black border-gray-400 border-b-0 translate-y-1' 
-                          : 'bg-background text-primary border-primary/50 hover:bg-primary hover:text-white'
+                          ? 'bg-primary text-white shadow-lg shadow-primary/30 scale-105' 
+                          : 'bg-background text-gray-400 border border-border hover:bg-primary/20 hover:text-primary'
                       }`}
                     >
                       {val}
@@ -234,6 +281,22 @@ export default function JudgeView() {
               </div>
             );
           })}
+
+          {/* Live Ranking mini-table */}
+          {liveRanking.length > 0 && liveRanking.some(r => r.count > 0) && (
+            <div className="bg-surface rounded-xl p-3 border border-border mt-2">
+              <h4 className="text-[10px] text-gray-500 font-bold uppercase mb-2">📊 Ranking en Vivo — Esta Pasada</h4>
+              {liveRanking.map((r, i) => (
+                <div key={r.id} className="flex justify-between items-center py-1 text-xs border-b border-border/50 last:border-0">
+                  <span className="text-gray-300"><span className="text-primary font-bold mr-1.5">#{i + 1}</span>{r.name}</span>
+                  <div className="flex gap-3">
+                    <span className="text-gray-500">Promedio: {r.avg}</span>
+                    <span className="text-white font-bold">{r.total} pts</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* End pasada button */}
           <button 
