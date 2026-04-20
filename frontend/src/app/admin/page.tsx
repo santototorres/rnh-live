@@ -8,7 +8,6 @@ export default function AdminView() {
   const { socket, connected } = useSocket();
   const [state, setState] = useState<any>(null);
   const [structure, setStructure] = useState<any>(null);
-  const [sheetUrl, setSheetUrl] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Judge creation
@@ -75,7 +74,7 @@ export default function AdminView() {
 
   // ── Google Sheets Sync ──
   const handleSync = async () => {
-    if (!sheetUrl) return;
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLVC-7KTW8mhUZiiyR7fvTfYEZ3S6AP7jkmC4_2S-SpK-NCQF6DpT4NWERQO8rGIBZ0dkaSiYhXK1E/pub?gid=0&single=true&output=csv";
     setIsSyncing(true);
     try {
       const res = await fetch(`${apiUrl}/admin/upload-url`, {
@@ -102,7 +101,6 @@ export default function AdminView() {
       alert("Error de conexión: " + err.message);
     } finally {
       setIsSyncing(false);
-      setSheetUrl("");
     }
   };
 
@@ -246,13 +244,11 @@ export default function AdminView() {
 
         {/* Sync */}
         <div className="p-3 border-b border-border">
-          <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Importar (Publicado Web)</label>
-          <div className="flex gap-1">
-            <input type="text" placeholder="URL web de Google Sheets..." value={sheetUrl} onChange={e => setSheetUrl(e.target.value)}
-              className="flex-1 bg-surface border border-border rounded px-2 py-1.5 text-white text-[11px] focus:border-primary focus:outline-none" />
-            <button onClick={handleSync} disabled={isSyncing || !sheetUrl}
-              className="bg-primary text-white font-bold px-2 rounded text-[11px] disabled:opacity-50">
-              {isSyncing ? "..." : "⬆"}
+          <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Google Sheets</label>
+          <div className="flex flex-col gap-1">
+            <button onClick={handleSync} disabled={isSyncing}
+              className="bg-[#0f9d58] text-white font-bold px-3 py-2 rounded text-[11px] disabled:opacity-50 hover:bg-[#0b8043] transition flex items-center justify-center gap-2">
+              {isSyncing ? "Actualizando..." : "↻ Sincronizar Participantes"}
             </button>
           </div>
         </div>
