@@ -6,7 +6,8 @@ import {
   createJudge,
   getJudges,
   deleteJudge,
-  resetTournament
+  resetTournament,
+  randomizeGroups
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -17,6 +18,7 @@ router.put('/category/:id', updateCategory);
 router.post('/judges', createJudge);
 router.get('/judges', getJudges);
 router.delete('/judges/:id', deleteJudge);
+router.post('/category/:categoryId/randomize', randomizeGroups);
 router.post('/reset', resetTournament);
 
 export default router;

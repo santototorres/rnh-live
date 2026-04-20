@@ -97,6 +97,50 @@ export const uploadParticipants = async (req: Request, res: Response) => {
   }
 };
 
+// ─── Randomize Groups ───
+
+export const randomizeGroups = async (req: Request, res: Response) => {
+  try {
+    const { categoryId } = req.params;
+    const category = await prisma.category.findUnique({ where: { id: categoryId } });
+    if (!category) return res.status(404).json({ error: "No category found" });
+
+    const round1 = await prisma.round.findFirst({ 
+      where: { categoryId, number: 1 }, 
+      include: { groups: { include: { participants: true } } } 
+    });
+    
+    if (round1) {
+      const participantIds = round1.groups.flatMap(g => g.participants.map(p => p.participantId));
+      
+      await prisma.groupParticipant.deleteMany({ where: { group: { roundId: round1.id } } });
+      await prisma.group.deleteMany({ where: { roundId: round1.id } });
+      
+      const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
+      const chunks = [];
+      for (let i = 0; i < shuffled.length; i += category.groupSize) {
+        chunks.push(shuffled.slice(i, i + category.groupSize));
+      }
+      
+      for (let i = 0; i < chunks.length; i++) {
+        const group = await prisma.group.create({
+          data: { name: `Grupo ${i + 1}`, roundId: round1.id }
+        });
+        await Promise.all(chunks[i].map((pid, index) =>
+          prisma.groupParticipant.create({
+            data: { groupId: group.id, participantId: pid, order: index + 1 }
+          })
+        ));
+      }
+    }
+
+    res.status(200).json({ message: "Grupos mezclados aleatoriamente." });
+  } catch (error) {
+    console.error("Error randomizeGroups:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 // ─── Get Full Tournament Structure ───
 
 export const getStructure = async (_req: Request, res: Response) => {

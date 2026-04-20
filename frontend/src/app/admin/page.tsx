@@ -124,6 +124,15 @@ export default function AdminView() {
     setTab("control");
   };
 
+  const randomizeGroups = async (catId: string) => {
+    if (!confirm("¿Reorganizar aleatoriamente todos los grupos de esta categoría?")) return;
+    try {
+      const res = await fetch(`${apiUrl}/admin/category/${catId}/randomize`, { method: 'POST' });
+      if (res.ok) fetchStructure();
+      else alert("Error al realizar el sorteo");
+    } catch { alert("Error de conexión"); }
+  };
+
   const setActiveParticipant = (participantId: string) => {
     socket?.emit("admin_set_participant", { participantId });
   };
@@ -245,12 +254,18 @@ export default function AdminView() {
                 </div>
 
                 {/* Start */}
-                <button onClick={() => startTournament(cat.id)}
-                  className="mt-4 w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-500 uppercase tracking-wider">
-                  ▶ Iniciar Torneo — {cat.name}
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full mt-4">
+                  <button onClick={() => randomizeGroups(cat.id)}
+                    className="bg-blue-600/30 border-2 border-blue-600 text-blue-400 font-bold p-3 rounded-xl hover:bg-blue-600 hover:text-white flex-1 transition-all shadow-lg text-sm sm:text-base">
+                    🎲 Realizar Sorteo
+                  </button>
+                  <button onClick={() => startTournament(cat.id)}
+                    className="bg-green-600 text-white font-bold p-3 rounded-xl hover:bg-green-500 flex-[2] uppercase tracking-wider shadow-lg text-sm sm:text-base">
+                    ▶ Iniciar Torneo — {cat.name}
+                  </button>
+                </div>
 
-                {/* Heats preview */}
+                {/* Grupos preview */}
                 <div className="mt-4">
                   {cat.rounds?.[0]?.groups?.map((g: any) => (
                     <div key={g.id} className="mb-2">

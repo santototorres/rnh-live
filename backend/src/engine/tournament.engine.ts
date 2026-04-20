@@ -184,7 +184,7 @@ export async function generateNextRound(categoryId: string, qualifiedParticipant
   for (let i = 0; i < chunks.length; i++) {
     const group = await prisma.group.create({
       data: {
-        name: `Heat ${i + 1}`,
+        name: `Grupo ${i + 1}`,
         roundId: round.id
       }
     });
