@@ -74,23 +74,31 @@ export default function AdminView() {
 
   // ── Google Sheets Sync ──
   const handleSync = async () => {
-    // Force CSV output regardless of pubhtml
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLVC-7KTW8mhUZiiyR7fvTfYEZ3S6AP7jkmC4_2S-SpK-NCQF6DpT4NWERQO8rGIBZ0dkaSiYhXK1E/pub?gid=0&single=true&output=csv";
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLVC-7KTW8mhUZiiyR7fvTfYEZ3S6AP7jkmC4_2S-SpK-NCQF6DpT4NWERQO8rGIBZ0dkaSiYhXK1E/pubhtml";
     setIsSyncing(true);
     try {
-      const res = await fetch(`${apiUrl}/admin/upload-url`, {
+      // 1. Fetch CSV mapping through NextJS local proxy
+      const proxyRes = await fetch('/rnh/api/sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sheetUrl })
       });
       
+      const proxyText = await proxyRes.text();
+      let proxyData;
+      try { proxyData = JSON.parse(proxyText); } catch(e) { throw new Error("NextJS Proxy devolvió inválido: " + proxyText.substring(0, 50)); }
+      if (!proxyRes.ok) throw new Error(proxyData.error || "Fallo en el proxy interno");
+
+      // 2. Submit pure JSON strictly to the backend
+      const res = await fetch(`${apiUrl}/admin/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participants: proxyData.participants })
+      });
+      
       const textResponse = await res.text();
       let data;
-      try {
-        data = JSON.parse(textResponse);
-      } catch(e) {
-        throw new Error("Respuesta inválida del servidor: " + textResponse.substring(0, 50));
-      }
+      try { data = JSON.parse(textResponse); } catch(e) { throw new Error("Backend devolvió inválido: " + textResponse.substring(0, 50)); }
 
       if (res.ok) {
         alert(`✅ ${data.totalParticipants} rollers en ${data.totalGroups} Grupos`);
