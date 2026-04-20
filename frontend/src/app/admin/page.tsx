@@ -2,7 +2,6 @@
 
 import { useSocket } from "@/components/SocketProvider";
 import { useEffect, useState } from "react";
-import Papa from "papaparse";
 
 export default function AdminView() {
   const { socket, connected } = useSocket();
@@ -75,38 +74,26 @@ export default function AdminView() {
 
   // ── Google Sheets Sync ──
   const handleSync = async () => {
+    if (!sheetUrl) return;
     setIsSyncing(true);
     try {
-      let docId = sheetUrl;
-      const match = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
-      if (match?.[1]) docId = match[1];
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`;
-      const response = await fetch(csvUrl);
-      if (!response.ok) throw new Error("No se pudo descargar. Verifica que el enlace sea público.");
-      const csvText = await response.text();
-
-      Papa.parse(csvText, {
-        complete: async (results) => {
-          try {
-            const res = await fetch(`${apiUrl}/admin/upload`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ participants: results.data })
-            });
-            const data = await res.json();
-            if (res.ok) {
-              alert(`✅ ${data.totalParticipants} rollers en ${data.totalGroups} Grupos`);
-              fetchStructure();
-            } else alert(`Error: ${data.error}`);
-          } catch { alert("Error de conexión"); }
-          finally { setIsSyncing(false); setSheetUrl(""); }
-        },
-        header: true,
-        skipEmptyLines: true,
+      const res = await fetch(`${apiUrl}/admin/upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetUrl })
       });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`✅ ${data.totalParticipants} rollers en ${data.totalGroups} Grupos`);
+        fetchStructure();
+      } else {
+        alert(`Error: ${data.error}`);
+      }
     } catch (err: any) {
-      alert("Error: " + err.message);
+      alert("Error de conexión: " + err.message);
+    } finally {
       setIsSyncing(false);
+      setSheetUrl("");
     }
   };
 

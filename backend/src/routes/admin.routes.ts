@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   uploadParticipants,
+  uploadParticipantsUrl,
   getStructure,
   updateCategory,
   createJudge,
@@ -14,6 +15,7 @@ import {
 const router = Router();
 
 router.post('/upload', uploadParticipants);
+router.post('/upload-url', uploadParticipantsUrl);
 router.get('/structure', getStructure);
 router.put('/category/:id', updateCategory);
 router.post('/judges', createJudge);
