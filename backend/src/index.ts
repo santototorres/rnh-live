@@ -17,9 +17,6 @@ import {
   resetAllConsensus
 } from './engine/consensus.manager';
 
-import dns from 'dns';
-dns.setDefaultResultOrder('ipv4first');
-
 dotenv.config();
 
 const app = express();

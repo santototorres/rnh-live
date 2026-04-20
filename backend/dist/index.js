@@ -11,8 +11,6 @@ const db_1 = __importDefault(require("./db"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const tournament_engine_1 = require("./engine/tournament.engine");
 const consensus_manager_1 = require("./engine/consensus.manager");
-const dns_1 = __importDefault(require("dns"));
-dns_1.default.setDefaultResultOrder('ipv4first');
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
