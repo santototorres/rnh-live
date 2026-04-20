@@ -74,54 +74,33 @@ export default function AdminView() {
 
   // ── Google Sheets Sync ──
   const handleSync = async () => {
-    const rawUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLVC-7KTW8mhUZiiyR7fvTfYEZ3S6AP7jkmC4_2S-SpK-NCQF6DpT4NWERQO8rGIBZ0dkaSiYhXK1E/pub?gid=0&single=true&output=csv";
-    const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(rawUrl);
-    
+    // Force CSV output regardless of pubhtml
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLVC-7KTW8mhUZiiyR7fvTfYEZ3S6AP7jkmC4_2S-SpK-NCQF6DpT4NWERQO8rGIBZ0dkaSiYhXK1E/pub?gid=0&single=true&output=csv";
     setIsSyncing(true);
     try {
-      const response = await fetch(proxyUrl);
-      if (!response.ok) throw new Error("No se pudo descargar la hoja de Google Sheets. Verifica la URL.");
-      
-      const csvText = await response.text();
-      
-      Papa.parse(csvText, {
-        header: true,
-        skipEmptyLines: true,
-        complete: async (results) => {
-          try {
-            const res = await fetch(`${apiUrl}/admin/upload`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ participants: results.data })
-            });
-
-            const textResponse = await res.text();
-            let data;
-            try {
-              data = JSON.parse(textResponse);
-            } catch(e) {
-              throw new Error("Respuesta inválida del servidor: " + textResponse.substring(0, 50));
-            }
-
-            if (res.ok) {
-              alert(`✅ ${data.totalParticipants} rollers en ${data.totalGroups} Grupos`);
-              fetchStructure();
-            } else {
-              alert(`Error: ${data.error || 'Desconocido'}`);
-            }
-          } catch (err: any) {
-            alert("Error de conexión con el backend: " + err.message);
-          } finally {
-            setIsSyncing(false);
-          }
-        },
-        error: (error: any) => {
-          alert("Error procesando el CSV: " + error.message);
-          setIsSyncing(false);
-        }
+      const res = await fetch(`${apiUrl}/admin/upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetUrl })
       });
+      
+      const textResponse = await res.text();
+      let data;
+      try {
+        data = JSON.parse(textResponse);
+      } catch(e) {
+        throw new Error("Respuesta inválida del servidor: " + textResponse.substring(0, 50));
+      }
+
+      if (res.ok) {
+        alert(`✅ ${data.totalParticipants} rollers en ${data.totalGroups} Grupos`);
+        fetchStructure();
+      } else {
+        alert(`Error: ${data.error || 'Desconocido'}`);
+      }
     } catch (err: any) {
-      alert("Error descargando desde Google Sheets: " + err.message);
+      alert("Error de conexión: " + err.message);
+    } finally {
       setIsSyncing(false);
     }
   };

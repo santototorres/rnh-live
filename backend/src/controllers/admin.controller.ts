@@ -10,7 +10,11 @@ export const uploadParticipantsUrl = async (req: Request, res: Response) => {
     if (!sheetUrl) return res.status(400).json({ error: "URL inválida" });
 
     let csvUrl = sheetUrl;
-    if (!sheetUrl.includes('/pub?')) {
+    
+    // Automatically convert pubhtml to pub?output=csv
+    if (sheetUrl.includes('/pubhtml')) {
+      csvUrl = sheetUrl.replace('/pubhtml', '/pub?output=csv');
+    } else if (!sheetUrl.includes('/pub?')) {
       let docId = sheetUrl;
       const match = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
       if (match?.[1]) docId = match[1];
