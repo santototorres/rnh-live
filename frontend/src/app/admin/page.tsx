@@ -19,6 +19,9 @@ export default function AdminView() {
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Editable params (local state before saving)
+  const [editParams, setEditParams] = useState<Record<string, any>>({});
+
   // Results
   const [classification, setClassification] = useState<any>(null);
   const [pasadaResults, setPasadaResults] = useState<any>(null);
@@ -31,7 +34,6 @@ export default function AdminView() {
       if (res.ok) {
         const data = await res.json();
         setStructure(data);
-        // Auto-select first category if none selected
         if (!selectedCatId && data?.categories?.length > 0) {
           setSelectedCatId(data.categories[0].id);
         }
@@ -40,6 +42,20 @@ export default function AdminView() {
   };
 
   useEffect(() => { fetchStructure(); }, []);
+
+  // When selectedCatId or structure changes, load the edit params
+  useEffect(() => {
+    if (!selectedCatId || !structure) return;
+    const cat = structure.categories?.find((c: any) => c.id === selectedCatId);
+    if (cat) {
+      setEditParams({
+        pasadasCount: cat.pasadasCount,
+        groupSize: cat.groupSize,
+        qualifyPercent: Math.round(cat.qualifyPercent * 100),
+        judgesCount: cat.judgesCount
+      });
+    }
+  }, [selectedCatId, structure]);
 
   useEffect(() => {
     if (!socket) return;
@@ -91,14 +107,22 @@ export default function AdminView() {
     }
   };
 
-  // ── Category Config ──
-  const updateCat = async (catId: string, field: string, value: number) => {
-    await fetch(`${apiUrl}/admin/category/${catId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [field]: value })
-    });
-    fetchStructure();
+  // ── Save ALL params at once ──
+  const saveParams = async (catId: string) => {
+    try {
+      await fetch(`${apiUrl}/admin/category/${catId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pasadasCount: editParams.pasadasCount,
+          groupSize: editParams.groupSize,
+          qualifyPercent: editParams.qualifyPercent / 100,
+          judgesCount: editParams.judgesCount
+        })
+      });
+      alert("✅ Parámetros guardados correctamente");
+      fetchStructure();
+    } catch { alert("Error al guardar"); }
   };
 
   // ── Judge CRUD ──
@@ -145,6 +169,7 @@ export default function AdminView() {
 
   const forceClosePasada = () => socket?.emit("admin_force_close_pasada");
   const forceNextGroup = () => socket?.emit("admin_force_next_group");
+
   const resetTournament = async () => {
     if (!confirm("⚠️ ¿Borrar TODOS los datos del torneo? Esta acción es irreversible.")) return;
     await fetch(`${apiUrl}/admin/reset`, { method: 'POST' });
@@ -163,6 +188,13 @@ export default function AdminView() {
   const activeCat = categories.find((c: any) => c.id === selectedCatId);
   const isThisCatLive = state?.activeCategoryId === selectedCatId;
 
+  // Check readiness
+  const totalParticipants = activeCat?.rounds?.[0]?.groups?.reduce((acc: number, g: any) => acc + (g.participants?.length || 0), 0) || 0;
+  const totalJudges = activeCat?.judges?.length || 0;
+  const paramsReady = editParams.pasadasCount > 0 && editParams.groupSize > 0 && editParams.qualifyPercent > 0 && editParams.judgesCount > 0;
+  const judgesReady = totalJudges >= (editParams.judgesCount || 1);
+  const canStart = paramsReady && judgesReady && totalParticipants > 0;
+
   return (
     <div className="flex h-screen bg-surface overflow-hidden">
 
@@ -173,7 +205,6 @@ export default function AdminView() {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         md:relative md:translate-x-0
       `}>
-        {/* Logo */}
         <div className="p-4 border-b border-border">
           <h1 className="text-lg font-black uppercase text-white tracking-wider">🎯 RNH</h1>
           <p className="text-[10px] text-gray-500 font-mono mt-0.5">CENTRO DE CONTROL</p>
@@ -183,7 +214,7 @@ export default function AdminView() {
           </div>
         </div>
 
-        {/* Sync Section */}
+        {/* Sync */}
         <div className="p-3 border-b border-border">
           <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Importar Participantes</label>
           <div className="flex gap-1">
@@ -226,7 +257,6 @@ export default function AdminView() {
           })}
         </div>
 
-        {/* Footer */}
         <div className="p-3 border-t border-border">
           <button onClick={resetTournament} className="w-full text-xs text-red-500 hover:bg-red-500/10 p-2 rounded font-bold transition-colors">
             🗑 Reiniciar Todo
@@ -234,19 +264,15 @@ export default function AdminView() {
         </div>
       </aside>
 
-      {/* Mobile overlay */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* ══════════ MAIN CONTENT ══════════ */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        
-        {/* Top bar (mobile) */}
         <div className="md:hidden flex items-center gap-3 p-3 bg-background border-b border-border">
           <button onClick={() => setSidebarOpen(true)} className="text-white text-xl">☰</button>
           <span className="text-white font-bold text-sm uppercase">{activeCat?.name || "RNH Admin"}</span>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           {!activeCat ? (
             <div className="flex items-center justify-center h-full">
@@ -267,51 +293,69 @@ export default function AdminView() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-black text-white uppercase">{activeCat.name}</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {activeCat.rounds?.[0]?.groups?.reduce((acc: number, g: any) => acc + (g.participants?.length || 0), 0) || 0} participantes
-                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">{totalParticipants} participantes</p>
                 </div>
-                {isThisCatLive && (
-                  <div className="bg-green-500/20 border border-green-500/50 text-green-400 px-3 py-1.5 rounded-full text-xs font-bold animate-pulse">
-                    ● EN VIVO
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  {isThisCatLive && (
+                    <div className="bg-green-500/20 border border-green-500/50 text-green-400 px-3 py-1.5 rounded-full text-xs font-bold animate-pulse">
+                      ● EN VIVO
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* ── PARÁMETROS ── */}
-              <section className="bg-background border border-border rounded-xl p-4">
-                <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">⚙ Parámetros</h3>
+              {/* ═══════════════════════════════════════════ */}
+              {/* STEP 1: PARAMETRIZACIÓN                     */}
+              {/* ═══════════════════════════════════════════ */}
+              <section className="bg-background border border-border rounded-xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase">① Parametrización</h3>
+                  <button onClick={() => saveParams(activeCat.id)}
+                    className="bg-blue-600 text-white font-bold px-5 py-2 rounded-lg hover:bg-blue-500 text-xs uppercase tracking-wider transition-colors">
+                    💾 Guardar Parámetros
+                  </button>
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="bg-surface p-3 rounded-lg text-center">
-                    <label className="text-[10px] text-gray-500 block mb-1 uppercase">Pasadas</label>
-                    <input type="number" defaultValue={activeCat.pasadasCount} min={1} max={10}
-                      onBlur={e => updateCat(activeCat.id, 'pasadasCount', parseInt(e.target.value))}
-                      className="w-full bg-transparent text-white font-black text-lg text-center focus:outline-none" />
+                  <div className="bg-surface p-4 rounded-lg text-center">
+                    <label className="text-[10px] text-gray-500 block mb-2 uppercase font-bold">N° Pasadas</label>
+                    <input type="number" value={editParams.pasadasCount ?? 0} min={0} max={10}
+                      onChange={e => setEditParams(prev => ({ ...prev, pasadasCount: parseInt(e.target.value) || 0 }))}
+                      className="w-full bg-transparent text-white font-black text-2xl text-center focus:outline-none border-b-2 border-border focus:border-primary transition-colors" />
                   </div>
-                  <div className="bg-surface p-3 rounded-lg text-center">
-                    <label className="text-[10px] text-gray-500 block mb-1 uppercase">Tamaño Grupo</label>
-                    <input type="number" defaultValue={activeCat.groupSize} min={2} max={10}
-                      onBlur={e => updateCat(activeCat.id, 'groupSize', parseInt(e.target.value))}
-                      className="w-full bg-transparent text-white font-black text-lg text-center focus:outline-none" />
+                  <div className="bg-surface p-4 rounded-lg text-center">
+                    <label className="text-[10px] text-gray-500 block mb-2 uppercase font-bold">Tamaño Grupo</label>
+                    <input type="number" value={editParams.groupSize ?? 0} min={0} max={20}
+                      onChange={e => setEditParams(prev => ({ ...prev, groupSize: parseInt(e.target.value) || 0 }))}
+                      className="w-full bg-transparent text-white font-black text-2xl text-center focus:outline-none border-b-2 border-border focus:border-primary transition-colors" />
                   </div>
-                  <div className="bg-surface p-3 rounded-lg text-center">
-                    <label className="text-[10px] text-gray-500 block mb-1 uppercase">% Clasifican</label>
-                    <input type="number" defaultValue={Math.round(activeCat.qualifyPercent * 100)} min={10} max={100}
-                      onBlur={e => updateCat(activeCat.id, 'qualifyPercent', parseInt(e.target.value) / 100)}
-                      className="w-full bg-transparent text-white font-black text-lg text-center focus:outline-none" />
+                  <div className="bg-surface p-4 rounded-lg text-center">
+                    <label className="text-[10px] text-gray-500 block mb-2 uppercase font-bold">% Clasifican</label>
+                    <input type="number" value={editParams.qualifyPercent ?? 0} min={0} max={100}
+                      onChange={e => setEditParams(prev => ({ ...prev, qualifyPercent: parseInt(e.target.value) || 0 }))}
+                      className="w-full bg-transparent text-white font-black text-2xl text-center focus:outline-none border-b-2 border-border focus:border-primary transition-colors" />
                   </div>
-                  <div className="bg-surface p-3 rounded-lg text-center">
-                    <label className="text-[10px] text-gray-500 block mb-1 uppercase">N° Jueces</label>
-                    <input type="number" defaultValue={activeCat.judgesCount} min={1} max={10}
-                      onBlur={e => updateCat(activeCat.id, 'judgesCount', parseInt(e.target.value))}
-                      className="w-full bg-transparent text-white font-black text-lg text-center focus:outline-none" />
+                  <div className="bg-surface p-4 rounded-lg text-center">
+                    <label className="text-[10px] text-gray-500 block mb-2 uppercase font-bold">N° Jueces</label>
+                    <input type="number" value={editParams.judgesCount ?? 0} min={0} max={10}
+                      onChange={e => setEditParams(prev => ({ ...prev, judgesCount: parseInt(e.target.value) || 0 }))}
+                      className="w-full bg-transparent text-white font-black text-2xl text-center focus:outline-none border-b-2 border-border focus:border-primary transition-colors" />
                   </div>
                 </div>
+
+                {!paramsReady && (
+                  <p className="text-yellow-500 text-xs mt-3 font-bold">⚠ Todos los parámetros deben ser mayores a 0. Guárdalos antes de continuar.</p>
+                )}
               </section>
 
-              {/* ── JUECES ── */}
-              <section className="bg-background border border-border rounded-xl p-4">
-                <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">👨‍⚖️ Jueces ({activeCat.judges?.length || 0})</h3>
+              {/* ═══════════════════════════════════════════ */}
+              {/* STEP 2: JUECES                              */}
+              {/* ═══════════════════════════════════════════ */}
+              <section className="bg-background border border-border rounded-xl p-5">
+                <h3 className="text-sm font-bold text-gray-400 uppercase mb-4">
+                  ② Jueces ({totalJudges}/{editParams.judgesCount || 0})
+                  {judgesReady && <span className="text-green-400 ml-2">✓</span>}
+                  {!judgesReady && totalJudges > 0 && <span className="text-yellow-500 ml-2">— faltan {(editParams.judgesCount || 0) - totalJudges}</span>}
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
                   {activeCat.judges?.map((j: any) => (
                     <div key={j.id} className="flex justify-between items-center bg-surface rounded-lg p-2.5 px-3">
@@ -324,7 +368,7 @@ export default function AdminView() {
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <input type="text" placeholder="Nombre" value={newJudgeName} onChange={e => setNewJudgeName(e.target.value)}
+                  <input type="text" placeholder="Nombre del juez" value={newJudgeName} onChange={e => setNewJudgeName(e.target.value)}
                     className="flex-1 bg-surface border border-border rounded px-3 py-2 text-white text-sm focus:border-primary focus:outline-none" />
                   <input type="text" placeholder="PIN" value={newJudgePin} onChange={e => setNewJudgePin(e.target.value)}
                     className="w-24 bg-surface border border-border rounded px-3 py-2 text-white text-sm text-center focus:border-primary focus:outline-none" />
@@ -332,22 +376,41 @@ export default function AdminView() {
                 </div>
               </section>
 
-              {/* ── ACCIONES PRE-TORNEO ── */}
-              <div className="flex flex-col sm:flex-row gap-2">
-                <button onClick={() => randomizeGroups(activeCat.id)}
-                  className="bg-blue-600/20 border-2 border-blue-600 text-blue-400 font-bold p-3 rounded-xl hover:bg-blue-600 hover:text-white flex-1 transition-all text-sm">
-                  🎲 Realizar Sorteo
-                </button>
-                <button onClick={() => startTournament(activeCat.id)}
-                  className="bg-green-600 text-white font-bold p-3 rounded-xl hover:bg-green-500 flex-[2] uppercase tracking-wider text-sm">
-                  ▶ Inicio Clasificaciones
-                </button>
-              </div>
+              {/* ═══════════════════════════════════════════ */}
+              {/* STEP 3: SORTEO + INICIO                     */}
+              {/* ═══════════════════════════════════════════ */}
+              <section className="bg-background border border-border rounded-xl p-5">
+                <h3 className="text-sm font-bold text-gray-400 uppercase mb-4">③ Sorteo e Inicio</h3>
+                
+                {!canStart && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4 text-xs text-yellow-400">
+                    <p className="font-bold mb-1">⚠ Requisitos pendientes:</p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      {!paramsReady && <li>Configura y guarda los parámetros (paso ①)</li>}
+                      {!judgesReady && <li>Agrega al menos {editParams.judgesCount || 0} jueces (paso ②)</li>}
+                      {totalParticipants === 0 && <li>Importa participantes desde Google Sheets</li>}
+                    </ul>
+                  </div>
+                )}
 
-              {/* ── GRUPOS ── */}
-              <section className="bg-background border border-border rounded-xl p-4">
-                <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">📋 Grupos</h3>
-                {activeCat.rounds?.[0]?.groups?.length > 0 ? (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button onClick={() => randomizeGroups(activeCat.id)}
+                    disabled={!canStart}
+                    className="bg-blue-600/20 border-2 border-blue-600 text-blue-400 font-bold p-3 rounded-xl hover:bg-blue-600 hover:text-white flex-1 transition-all text-sm disabled:opacity-30 disabled:cursor-not-allowed">
+                    🎲 Realizar Sorteo
+                  </button>
+                  <button onClick={() => startTournament(activeCat.id)}
+                    disabled={!canStart}
+                    className="bg-green-600 text-white font-bold p-3 rounded-xl hover:bg-green-500 flex-[2] uppercase tracking-wider text-sm disabled:opacity-30 disabled:cursor-not-allowed">
+                    ▶ Inicio Clasificaciones
+                  </button>
+                </div>
+              </section>
+
+              {/* ── GRUPOS PREVIEW ── */}
+              {activeCat.rounds?.[0]?.groups?.length > 0 && (
+                <section className="bg-background border border-border rounded-xl p-5">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase mb-3">📋 Grupos</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {activeCat.rounds[0].groups.map((g: any) => (
                       <div key={g.id} className="bg-surface rounded-lg p-3">
@@ -362,17 +425,14 @@ export default function AdminView() {
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-gray-600 text-xs italic text-center py-4">Sin grupos creados aún</p>
-                )}
-              </section>
+                </section>
+              )}
 
               {/* ── CONTROL EN VIVO ── */}
               {isThisCatLive && (
-                <section className="bg-background border-2 border-green-600/30 rounded-xl p-4 space-y-4">
-                  <h3 className="text-xs font-bold text-green-400 uppercase">🎮 Control en Vivo</h3>
+                <section className="bg-background border-2 border-green-600/30 rounded-xl p-5 space-y-4">
+                  <h3 className="text-sm font-bold text-green-400 uppercase">🎮 Control en Vivo</h3>
                   
-                  {/* Estado */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
                     <div className="bg-surface p-2 rounded-lg">
                       <span className="text-[10px] text-gray-500 block uppercase">Fase</span>
@@ -392,7 +452,6 @@ export default function AdminView() {
                     </div>
                   </div>
 
-                  {/* Participantes en el Spot */}
                   {state?.status === "pasada_activa" && state?.groupParticipants?.length > 0 && (
                     <div>
                       <h4 className="text-[10px] text-gray-500 font-bold uppercase mb-2">Participantes en el Spot</h4>
@@ -411,7 +470,6 @@ export default function AdminView() {
                     </div>
                   )}
 
-                  {/* Emergencia */}
                   <div className="flex gap-2">
                     <button onClick={forceClosePasada} className="flex-1 bg-red-900/30 text-red-400 font-bold py-2 rounded-lg hover:bg-red-900 text-xs border border-red-900/50">
                       Forzar Cierre Pasada
@@ -425,8 +483,8 @@ export default function AdminView() {
 
               {/* ── RESULTADOS ── */}
               {(pasadaResults || classification) && (
-                <section className="bg-background border border-border rounded-xl p-4 space-y-4">
-                  <h3 className="text-xs font-bold text-gray-500 uppercase">📊 Resultados</h3>
+                <section className="bg-background border border-border rounded-xl p-5 space-y-4">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase">📊 Resultados</h3>
 
                   {pasadaResults && (
                     <div>
@@ -443,13 +501,9 @@ export default function AdminView() {
                   {classification && (
                     <div className="border-t border-border pt-4">
                       {classification.roundNumber >= 2 ? (
-                        /* ── PODIO FINAL ── */
                         <div className="text-center">
                           <h4 className="text-2xl font-black text-white uppercase mb-6">🏆 Podio Final — {classification.categoryName}</h4>
-                          
-                          {/* Top 3 Podium */}
                           <div className="flex justify-center items-end gap-3 mb-6">
-                            {/* 2nd place */}
                             {classification.qualified?.[1] && (
                               <div className="flex flex-col items-center">
                                 <span className="text-3xl mb-2">🥈</span>
@@ -462,7 +516,6 @@ export default function AdminView() {
                                 </div>
                               </div>
                             )}
-                            {/* 1st place */}
                             {classification.qualified?.[0] && (
                               <div className="flex flex-col items-center">
                                 <span className="text-4xl mb-2">🥇</span>
@@ -475,7 +528,6 @@ export default function AdminView() {
                                 </div>
                               </div>
                             )}
-                            {/* 3rd place */}
                             {classification.qualified?.[2] && (
                               <div className="flex flex-col items-center">
                                 <span className="text-3xl mb-2">🥉</span>
@@ -489,8 +541,6 @@ export default function AdminView() {
                               </div>
                             )}
                           </div>
-
-                          {/* Rest of participants */}
                           <div className="text-left mt-4">
                             <h5 className="text-[10px] text-gray-500 font-bold uppercase mb-2">Ranking Completo</h5>
                             {[...classification.qualified, ...classification.eliminated]?.map((r: any, i: number) => (
@@ -502,7 +552,6 @@ export default function AdminView() {
                           </div>
                         </div>
                       ) : (
-                        /* ── CLASIFICACIÓN RONDA 1 ── */
                         <>
                           <h4 className="text-xs text-green-400 font-bold uppercase mb-2">
                             Clasificación (Top {Math.round(classification.qualifyPercent * 100)}%)

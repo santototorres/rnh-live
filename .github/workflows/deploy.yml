@@ -25,11 +25,5 @@ jobs:
             cd /root/rnh-live
             git pull origin main
             
-            # Soporte cruzado para docker-compose (v1) o docker compose (v2)
-            if command -v docker-compose &> /dev/null; then
-              docker-compose down
-              docker-compose up -d --build
-            else
-              docker compose down
-              docker compose up -d --build
-            fi
+            docker compose build backend frontend
+            docker compose up -d
