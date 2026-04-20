@@ -22,108 +22,101 @@ export const uploadParticipantsUrl = async (req: Request, res: Response) => {
     }
     const csvText = await response.text();
 
-    Papa.parse(csvText, {
+    const results = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      complete: async (results) => {
-        try {
-          const participants = results.data as any[];
-
-          let tournament = await prisma.tournament.findFirst({ where: { status: "setup" } });
-          if (!tournament) {
-            tournament = await prisma.tournament.create({
-              data: { name: "RNH Live Event", status: "setup" }
-            });
-            const fixedCategories = ["Mujeres Pro", "Hombres Amateur", "Hombres Pro", "Rollerskate", "Mujeres Amateur", "Junior"];
-            for (const catName of fixedCategories) {
-              await prisma.category.create({ data: { name: catName, tournamentId: tournament.id, groupSize: 4 } });
-            }
-          }
-
-          const participantsByCategory: Record<string, any[]> = {};
-          for (const p of participants) {
-            const catName = p.Categoria || p.categoria || p.category || "Open";
-            if (!participantsByCategory[catName]) participantsByCategory[catName] = [];
-            participantsByCategory[catName].push(p);
-          }
-
-          let totalGroups = 0;
-          let totalParticipants = 0;
-
-          const categories = await prisma.category.findMany({ where: { tournamentId: tournament.id } });
-
-          for (const [catName, catParticipants] of Object.entries(participantsByCategory)) {
-            let category = categories.find(c => c.name.toLowerCase().trim() === catName.toLowerCase().trim());
-            
-            if (!category) {
-              category = await prisma.category.create({
-                data: { name: catName, tournamentId: tournament.id, groupSize }
-              });
-            }
-
-            const createdParticipants = await Promise.all(
-              catParticipants.map(async (p: any) =>
-                prisma.participant.create({
-                  data: {
-                    name: p.Nombre || p.nombre || p.name || 'Unknown',
-                    alias: p.Alias || p.alias || null,
-                    categoryId: category!.id
-                  }
-                })
-              )
-            );
-
-            totalParticipants += createdParticipants.length;
-
-            let round1 = await prisma.round.findFirst({ where: { categoryId: category.id, number: 1 } });
-            if (!round1) {
-              round1 = await prisma.round.create({ data: { number: 1, categoryId: category.id } });
-            }
-
-            const existingParticipants = await prisma.participant.findMany({ where: { categoryId: category.id } });
-            const shuffled = [...existingParticipants].sort(() => Math.random() - 0.5);
-            
-            const existingGroups = await prisma.group.findMany({ where: { roundId: round1.id } });
-            if (existingGroups.length > 0) {
-              await prisma.groupParticipant.deleteMany({ where: { groupId: { in: existingGroups.map(g => g.id) } } });
-              await prisma.group.deleteMany({ where: { roundId: round1.id } });
-            }
-
-            const chunks = [];
-            for (let i = 0; i < shuffled.length; i += groupSize) {
-              chunks.push(shuffled.slice(i, i + groupSize));
-            }
-
-            for (let i = 0; i < chunks.length; i++) {
-              const group = await prisma.group.create({
-                data: { name: `Grupo ${i + 1}`, roundId: round1.id }
-              });
-              await Promise.all(chunks[i].map((p, index) =>
-                prisma.groupParticipant.create({
-                  data: { groupId: group.id, participantId: p.id, order: index + 1 }
-                })
-              ));
-            }
-
-            totalGroups += chunks.length;
-          }
-
-          res.status(200).json({ 
-            message: "Participantes importados correctamente.",
-            tournamentId: tournament.id,
-            totalParticipants,
-            totalGroups
-          });
-        } catch (e: any) {
-          console.error("Parse Error:", e);
-          res.status(500).json({ error: "Error interno procesando CSV: " + e.message });
-        }
-      }
     });
+    
+    const participants = results.data as any[];
 
+    let tournament = await prisma.tournament.findFirst({ where: { status: "setup" } });
+    if (!tournament) {
+      tournament = await prisma.tournament.create({
+        data: { name: "RNH Live Event", status: "setup" }
+      });
+      const fixedCategories = ["Mujeres Pro", "Hombres Amateur", "Hombres Pro", "Rollerskate", "Mujeres Amateur", "Junior"];
+      for (const catName of fixedCategories) {
+        await prisma.category.create({ data: { name: catName, tournamentId: tournament!.id, groupSize: 4 } });
+      }
+    }
+
+    const participantsByCategory: Record<string, any[]> = {};
+    for (const p of participants) {
+      const catName = p.Categoria || p.categoria || p.category || "Open";
+      if (!participantsByCategory[catName]) participantsByCategory[catName] = [];
+      participantsByCategory[catName].push(p);
+    }
+
+    let totalGroups = 0;
+    let totalParticipants = 0;
+
+    const categories = await prisma.category.findMany({ where: { tournamentId: tournament.id } });
+
+    for (const [catName, catParticipants] of Object.entries(participantsByCategory)) {
+      let category = categories.find(c => c.name.toLowerCase().trim() === catName.toLowerCase().trim());
+      
+      if (!category) {
+        category = await prisma.category.create({
+          data: { name: catName, tournamentId: tournament!.id, groupSize }
+        });
+      }
+
+      const createdParticipants = await Promise.all(
+        catParticipants.map(async (p: any) =>
+          prisma.participant.create({
+            data: {
+              name: p.Nombre || p.nombre || p.name || 'Unknown',
+              alias: p.Alias || p.alias || null,
+              categoryId: category!.id
+            }
+          })
+        )
+      );
+
+      totalParticipants += createdParticipants.length;
+
+      let round1 = await prisma.round.findFirst({ where: { categoryId: category.id, number: 1 } });
+      if (!round1) {
+        round1 = await prisma.round.create({ data: { number: 1, categoryId: category.id } });
+      }
+
+      const existingParticipants = await prisma.participant.findMany({ where: { categoryId: category.id } });
+      const shuffled = [...existingParticipants].sort(() => Math.random() - 0.5);
+      
+      const existingGroups = await prisma.group.findMany({ where: { roundId: round1.id } });
+      if (existingGroups.length > 0) {
+        await prisma.groupParticipant.deleteMany({ where: { groupId: { in: existingGroups.map(g => g.id) } } });
+        await prisma.group.deleteMany({ where: { roundId: round1.id } });
+      }
+
+      const chunks = [];
+      for (let i = 0; i < shuffled.length; i += groupSize) {
+        chunks.push(shuffled.slice(i, i + groupSize));
+      }
+
+      for (let i = 0; i < chunks.length; i++) {
+        const group = await prisma.group.create({
+          data: { name: `Grupo ${i + 1}`, roundId: round1.id }
+        });
+        await Promise.all(chunks[i].map((p, index) =>
+          prisma.groupParticipant.create({
+            data: { groupId: group.id, participantId: p.id, order: index + 1 }
+          })
+        ));
+      }
+
+      totalGroups += chunks.length;
+    }
+
+    res.status(200).json({ 
+      message: "Participantes importados correctamente.",
+      tournamentId: tournament.id,
+      totalParticipants,
+      totalGroups
+    });
   } catch (error: any) {
     console.error("Error uploadParticipantsUrl:", error);
-    res.status(500).json({ error: "Error en servidor al obtener CSV: " + error.message });
+    res.status(500).json({ error: "Error interno: " + error.message + " | Stack: " + String(error.stack) });
   }
 };
 

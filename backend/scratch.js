@@ -1,25 +1,17 @@
-const { Client } = require('pg');
+const Papa = require('papaparse');
 
 async function test() {
-  const client = new Client({
-    connectionString: "postgresql://rnh:rnhpassword@xtreetx.com:5432/rnh_db?schema=public",
+  const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLVC-7KTW8mhUZiiyR7fvTfYEZ3S6AP7jkmC4_2S-SpK-NCQF6DpT4NWERQO8rGIBZ0dkaSiYhXK1E/pub?gid=0&single=true&output=csv";
+  const res = await fetch(url);
+  const text = await res.text();
+  console.log("TEXT LENGTH:", text.length);
+  Papa.parse(text, {
+    header: true,
+    skipEmptyLines: true,
+    complete: (results) => {
+      console.log("PARSED ROWS:", results.data.length);
+      console.log("FIRST ROW:", results.data[0]);
+    }
   });
-  
-  try {
-    await client.connect();
-    console.log("Connected to remote DB");
-    
-    const state = await client.query('SELECT * FROM "SystemState"');
-    console.log("SystemState:", state.rows[0]);
-
-    const scores = await client.query('SELECT * FROM "Score"');
-    console.log(`Scores Count: ${scores.rowCount}`);
-    console.log("Scores:", scores.rows);
-
-  } catch (e) {
-    console.error("DB Error:", e.message);
-  } finally {
-    await client.end();
-  }
 }
 test();
