@@ -23,7 +23,7 @@ model Category {
   judgesCount    Int         @default(3)
   groupSize      Int         @default(4)
   pasadasCount   Int         @default(2)    // number of runs per group
-  qualifyPercent Float       @default(0.5)  // e.g. 0.5 = top 50% advance
+  qualifyCount   Int         @default(5)    // exact count of participants to qualify
   tournament     Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   
   participants   Participant[]

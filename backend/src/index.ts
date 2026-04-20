@@ -447,6 +447,18 @@ io.on('connection', (socket) => {
     console.log('Admin forzó siguiente grupo');
   });
 
+  // ── ADMIN: Emit Configured Params for Live Screen ──
+  socket.on('admin_category_configured', (data: { categoryName: string; pasadasCount: number; groupSize: number; qualifyCount: number; judgesCount: number }) => {
+    io.emit('live_category_configured', data);
+    console.log('Category configured for live screen:', data.categoryName);
+  });
+
+  // ── ADMIN: Trigger Raffle Animation on Live Screen ──
+  socket.on('admin_raffle_start', (data: { type: 'clasificaciones' | 'finales'; participants: string[] }) => {
+    io.emit('live_raffle_start', data);
+    console.log(`Raffle started for ${data.type}`);
+  });
+
   // ── ADMIN: Generate next round ──
   socket.on('admin_generate_next_round', async (data: { qualifiedIds: string[] }) => {
     const state = await getState();
@@ -457,8 +469,7 @@ io.on('connection', (socket) => {
       where: { roundId: newRound.id },
       orderBy: { name: 'asc' }
     });
-      // DO NOT update status to active yet. Wait for admin_start_tournament.
-    }
+    // DO NOT update status to active yet. Wait for admin_start_tournament.
 
     await broadcastState();
     console.log('Nueva ronda generada (Finales creadas pero no iniciadas)');

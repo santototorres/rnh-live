@@ -1,7 +1,7 @@
 "use client";
 
 import { useSocket } from "@/components/SocketProvider";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function LiveView() {
@@ -12,6 +12,13 @@ export default function LiveView() {
   const [classification, setClassification] = useState<any>(null);
   const [showResults, setShowResults] = useState<"pasada" | "group" | "classification" | null>(null);
 
+  // New Live scenes
+  const [configuredParams, setConfiguredParams] = useState<any>(null);
+  const [raffleData, setRaffleData] = useState<any>(null);
+  const [rafflePhase, setRafflePhase] = useState<"spinning" | "done" | null>(null);
+  const [shuffledNames, setShuffledNames] = useState<string[]>([]);
+  const [liveScene, setLiveScene] = useState<"idle" | "configured" | "raffle">("idle");
+
   useEffect(() => {
     if (!socket) return;
     socket.emit("request_state");
@@ -21,6 +28,8 @@ export default function LiveView() {
       if (s.status === "pasada_activa") {
         setShowResults(null);
         setPasadaResults(null);
+        setLiveScene("idle");
+        setRafflePhase(null);
       }
     });
 
@@ -39,15 +48,56 @@ export default function LiveView() {
       setShowResults("classification");
     });
 
+    // New live events
+    socket.on("live_category_configured", (d) => {
+      setConfiguredParams(d);
+      setLiveScene("configured");
+      setRafflePhase(null);
+    });
+
+    socket.on("live_raffle_start", (d) => {
+      setRaffleData(d);
+      setLiveScene("raffle");
+      setRafflePhase("spinning");
+    });
+
+    socket.on("live_raffle_groups", (d) => {
+      setRaffleData((prev: any) => ({ ...prev, groups: d.groups }));
+      setRafflePhase("done");
+    });
+
     return () => {
       socket.off("state_update");
       socket.off("pasada_results");
       socket.off("group_results");
       socket.off("round_classification");
+      socket.off("live_category_configured");
+      socket.off("live_raffle_start");
+      socket.off("live_raffle_groups");
     };
   }, [socket]);
 
+  // Raffle spinning animation
+  useEffect(() => {
+    if (rafflePhase !== "spinning" || !raffleData?.participants?.length) return;
+    const names = raffleData.participants;
+    let idx = 0;
+    const interval = setInterval(() => {
+      // Shuffle and show random subset
+      const shuffled = [...names].sort(() => Math.random() - 0.5);
+      setShuffledNames(shuffled.slice(0, Math.min(8, shuffled.length)));
+      idx++;
+      if (idx > 30) {
+        clearInterval(interval);
+        // After spinning, show final groups (fetched from structure)
+        setTimeout(() => setRafflePhase("done"), 500);
+      }
+    }, 120);
+    return () => clearInterval(interval);
+  }, [rafflePhase, raffleData]);
+
   const isActive = state?.status === "pasada_activa" && !showResults;
+  const showLiveScenes = !isActive && !showResults && liveScene !== "idle";
 
   return (
     <div className="flex-1 flex flex-col bg-background min-h-screen overflow-hidden text-center justify-center relative">
@@ -81,8 +131,8 @@ export default function LiveView() {
       )}
 
       <AnimatePresence mode="wait">
-        {/* ── STANDBY ── */}
-        {!isActive && !showResults && (
+        {/* ── STANDBY (pure idle) ── */}
+        {!isActive && !showResults && liveScene === "idle" && (
           <motion.div key="standby"
             initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, y: -50 }}
             className="flex flex-col items-center justify-center h-full z-10 p-8">
@@ -91,7 +141,115 @@ export default function LiveView() {
               <img src="/rnh/logornh.png" alt="RNH Logo" className="w-48 md:w-64 h-auto object-contain drop-shadow-[0_0_30px_rgba(255,255,255,0.2)]" />
             </motion.div>
             <h1 className="text-5xl md:text-7xl font-black uppercase text-white tracking-widest mt-4">ROLL NOT HATE</h1>
-            <p className="mt-6 text-xl text-gray-400 font-bold uppercase tracking-[0.3em]">Próximo roller en breve...</p>
+            <div className="mt-8 flex gap-2">
+              <motion.div initial={{ width: 0 }} animate={{ width: "120px" }} className="h-1.5 bg-primary/50 skew-x-[12deg]" />
+              <motion.div initial={{ width: 0 }} animate={{ width: "60px" }} transition={{ delay: 0.2 }} className="h-1.5 bg-white/30 skew-x-[12deg]" />
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── CONFIGURED PARAMS HUD ── */}
+        {!isActive && !showResults && liveScene === "configured" && configuredParams && (
+          <motion.div key="configured"
+            initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }}
+            className="flex flex-col items-center justify-center h-full z-10 p-8 gap-8">
+            
+            <motion.h2 
+              initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}
+              className="text-xl md:text-2xl font-bold text-gray-400 uppercase tracking-[0.4em]">
+              Configuración
+            </motion.h2>
+
+            <motion.h1
+              initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.3, type: "spring" }}
+              className="text-4xl md:text-6xl font-black uppercase text-white tracking-wider">
+              {configuredParams.categoryName}
+            </motion.h1>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-4">
+              {[
+                { label: "PASADAS", value: configuredParams.pasadasCount, icon: "🔄", color: "text-blue-400" },
+                { label: "POR GRUPO", value: configuredParams.groupSize, icon: "👥", color: "text-purple-400" },
+                { label: "CLASIFICAN", value: configuredParams.qualifyCount, icon: "🏆", color: "text-green-400" },
+                { label: "JUECES", value: configuredParams.judgesCount, icon: "⚖️", color: "text-yellow-400" },
+              ].map((item, i) => (
+                <motion.div key={item.label}
+                  initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 + i * 0.15, type: "spring" }}
+                  className="bg-surface/60 backdrop-blur border border-border rounded-2xl p-6 min-w-[140px]">
+                  <span className="text-4xl block mb-3">{item.icon}</span>
+                  <span className={`text-5xl md:text-7xl font-black block ${item.color}`}>{item.value}</span>
+                  <span className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mt-2 block">{item.label}</span>
+                </motion.div>
+              ))}
+            </div>
+
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}
+              className="flex gap-2 mt-6">
+              <div className="h-1.5 w-20 bg-primary/50 skew-x-[12deg]" />
+              <div className="h-1.5 w-10 bg-white/30 skew-x-[12deg]" />
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* ── RAFFLE ANIMATION ── */}
+        {!isActive && !showResults && liveScene === "raffle" && (
+          <motion.div key="raffle"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center h-full z-10 p-8">
+
+            {rafflePhase === "spinning" && (
+              <motion.div className="flex flex-col items-center gap-6">
+                <motion.h2 
+                  animate={{ opacity: [1, 0.5, 1] }} transition={{ repeat: Infinity, duration: 0.8 }}
+                  className="text-2xl md:text-4xl font-black uppercase text-primary tracking-[0.3em]">
+                  🎲 Sorteando...
+                </motion.h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-3xl">
+                  {shuffledNames.map((name, i) => (
+                    <motion.div key={`${name}-${i}`}
+                      initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
+                      animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      transition={{ duration: 0.08 }}
+                      className="bg-surface/80 backdrop-blur border border-primary/30 rounded-xl px-4 py-3 text-white font-bold text-sm md:text-base shadow-[0_0_20px_rgba(255,45,45,0.15)]">
+                      {name}
+                    </motion.div>
+                  ))}
+                </div>
+                <motion.div
+                  animate={{ scaleX: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 0.5 }}
+                  className="h-1.5 w-40 bg-primary rounded-full mt-4"
+                />
+              </motion.div>
+            )}
+
+            {rafflePhase === "done" && raffleData?.participants && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: "spring", damping: 20 }}
+                className="flex flex-col items-center gap-6 w-full max-w-4xl">
+                <motion.h2 
+                  initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+                  className="text-2xl md:text-4xl font-black uppercase text-green-400 tracking-[0.2em]">
+                  ✅ Sorteo Completado
+                </motion.h2>
+                <p className="text-gray-400 text-sm uppercase tracking-widest">
+                  {raffleData.type === 'clasificaciones' ? 'Grupos de Clasificaciones' : 'Grupos de Finales'}
+                </p>
+                <p className="text-gray-500 text-xs tracking-wider">
+                  {raffleData.participants.length} participantes listos
+                </p>
+                <motion.div 
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+                  className="flex gap-2 mt-4">
+                  <div className="h-1.5 w-24 bg-green-500/50 skew-x-[12deg]" />
+                  <div className="h-1.5 w-12 bg-white/20 skew-x-[12deg]" />
+                </motion.div>
+              </motion.div>
+            )}
+
           </motion.div>
         )}
 
@@ -191,7 +349,7 @@ export default function LiveView() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="flex flex-col items-center justify-center h-full z-10 p-8">
             <h2 className="text-xl text-green-500 font-bold uppercase tracking-[0.3em] mb-6">
-              🎯 Clasificación — Top {Math.round(classification.qualifyPercent * 100)}%
+              🎯 Clasificación — Top {classification.qualifyCount}
             </h2>
             <div className="w-full max-w-lg">
               {classification.qualified?.map((r: any, i: number) => (

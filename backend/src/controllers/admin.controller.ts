@@ -183,14 +183,14 @@ export const getStructure = async (_req: Request, res: Response) => {
 export const updateCategory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { pasadasCount, groupSize, qualifyPercent, judgesCount } = req.body;
+    const { pasadasCount, groupSize, qualifyCount, judgesCount } = req.body;
 
     const updated = await prisma.category.update({
       where: { id: id as string },
       data: {
         ...(pasadasCount !== undefined && { pasadasCount }),
         ...(groupSize !== undefined && { groupSize }),
-        ...(qualifyPercent !== undefined && { qualifyPercent }),
+        ...(qualifyCount !== undefined && { qualifyCount }),
         ...(judgesCount !== undefined && { judgesCount })
       }
     });
@@ -320,7 +320,7 @@ export const resetTournament = async (_req: Request, res: Response) => {
 
 export const resetCategory = async (req: Request, res: Response) => {
   try {
-    const categoryId = req.params.categoryId;
+    const categoryId = req.params.categoryId as string;
     const cat = await prisma.category.findUnique({ where: { id: categoryId } });
     if (!cat) return res.status(404).json({ error: "No encontrada" });
 

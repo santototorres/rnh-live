@@ -51,7 +51,7 @@ export default function AdminView() {
       setEditParams({
         pasadasCount: cat.pasadasCount,
         groupSize: cat.groupSize,
-        qualifyPercent: Math.round(cat.qualifyPercent * 100),
+        qualifyCount: cat.qualifyCount,
         judgesCount: cat.judgesCount
       });
     }
@@ -110,15 +110,24 @@ export default function AdminView() {
   // ── Save ALL params at once ──
   const saveParams = async (catId: string) => {
     try {
+      const cat = structure?.categories?.find((c: any) => c.id === catId);
       await fetch(`${apiUrl}/admin/category/${catId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pasadasCount: editParams.pasadasCount,
           groupSize: editParams.groupSize,
-          qualifyPercent: editParams.qualifyPercent / 100,
+          qualifyCount: editParams.qualifyCount,
           judgesCount: editParams.judgesCount
         })
+      });
+      // Emit to live screen
+      socket?.emit('admin_category_configured', {
+        categoryName: cat?.name || '',
+        pasadasCount: editParams.pasadasCount,
+        groupSize: editParams.groupSize,
+        qualifyCount: editParams.qualifyCount,
+        judgesCount: editParams.judgesCount
       });
       alert("✅ Parámetros guardados correctamente");
       fetchStructure();
@@ -158,7 +167,12 @@ export default function AdminView() {
     if (!confirm("¿Reorganizar aleatoriamente todos los grupos de esta categoría?")) return;
     try {
       const res = await fetch(`${apiUrl}/admin/category/${catId}/randomize`, { method: 'POST' });
-      if (res.ok) fetchStructure();
+      if (res.ok) {
+        const cat = structure?.categories?.find((c: any) => c.id === catId);
+        const allNames = cat?.participants?.map((p: any) => p.name) || [];
+        socket?.emit('admin_raffle_start', { type: 'clasificaciones', participants: allNames });
+        fetchStructure();
+      }
       else alert("Error al realizar el sorteo");
     } catch { alert("Error de conexión"); }
   };
@@ -360,9 +374,9 @@ export default function AdminView() {
                       className="w-full bg-transparent text-white font-black text-2xl text-center focus:outline-none border-b-2 border-border focus:border-primary transition-colors" />
                   </div>
                   <div className="bg-surface p-4 rounded-lg text-center">
-                    <label className="text-[10px] text-gray-500 block mb-2 uppercase font-bold">% Clasifican</label>
-                    <input type="number" value={editParams.qualifyPercent ?? 0} min={0} max={100}
-                      onChange={e => setEditParams(prev => ({ ...prev, qualifyPercent: parseInt(e.target.value) || 0 }))}
+                    <label className="text-[10px] text-gray-500 block mb-2 uppercase font-bold">N° Clasifican</label>
+                    <input type="number" value={editParams.qualifyCount ?? 0} min={0} max={100}
+                      onChange={e => setEditParams(prev => ({ ...prev, qualifyCount: parseInt(e.target.value) || 0 }))}
                       className="w-full bg-transparent text-white font-black text-2xl text-center focus:outline-none border-b-2 border-border focus:border-primary transition-colors" />
                   </div>
                   <div className="bg-surface p-4 rounded-lg text-center">
@@ -591,7 +605,7 @@ export default function AdminView() {
                       ) : (
                         <>
                           <h4 className="text-xs text-green-400 font-bold uppercase mb-2">
-                            Clasificación (Top {Math.round(classification.qualifyPercent * 100)}%)
+                            Clasificación (Top {classification.qualifyCount})
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                             <div>
@@ -635,8 +649,8 @@ export default function AdminView() {
                                   <input type="number" min={1} value={editParams.groupSize ?? 0} onChange={e => setEditParams(prev => ({ ...prev, groupSize: parseInt(e.target.value) || 0 }))} className="w-full bg-background mt-1 text-white text-sm text-center p-1.5 rounded border border-border focus:border-primary focus:outline-none" />
                                 </div>
                                 <div className="text-center">
-                                  <label className="text-[9px] text-gray-500 uppercase font-bold">% Clasifican</label>
-                                  <input type="number" min={0} value={editParams.qualifyPercent ?? 0} onChange={e => setEditParams(prev => ({ ...prev, qualifyPercent: parseInt(e.target.value) || 0 }))} className="w-full bg-background mt-1 text-white text-sm text-center p-1.5 rounded border border-border focus:border-primary focus:outline-none" />
+                                  <label className="text-[9px] text-gray-500 uppercase font-bold">N° Clasifican</label>
+                                  <input type="number" min={0} value={editParams.qualifyCount ?? 0} onChange={e => setEditParams(prev => ({ ...prev, qualifyCount: parseInt(e.target.value) || 0 }))} className="w-full bg-background mt-1 text-white text-sm text-center p-1.5 rounded border border-border focus:border-primary focus:outline-none" />
                                 </div>
                                 <div className="text-center">
                                   <label className="text-[9px] text-gray-500 uppercase font-bold">N° Jueces</label>
