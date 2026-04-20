@@ -14,10 +14,10 @@ export default function AdminView() {
   // Judge creation
   const [newJudgeName, setNewJudgeName] = useState("");
   const [newJudgePin, setNewJudgePin] = useState("");
-  const [newJudgeCatId, setNewJudgeCatId] = useState("");
 
-  // Tab control
-  const [tab, setTab] = useState<"config" | "control" | "results">("config");
+  // Sidebar
+  const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Results
   const [classification, setClassification] = useState<any>(null);
@@ -28,7 +28,14 @@ export default function AdminView() {
   const fetchStructure = async () => {
     try {
       const res = await fetch(`${apiUrl}/admin/structure`);
-      if (res.ok) setStructure(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setStructure(data);
+        // Auto-select first category if none selected
+        if (!selectedCatId && data?.categories?.length > 0) {
+          setSelectedCatId(data.categories[0].id);
+        }
+      }
     } catch (e) { console.error(e); }
   };
 
@@ -96,11 +103,11 @@ export default function AdminView() {
 
   // ── Judge CRUD ──
   const createJudge = async () => {
-    if (!newJudgeName || !newJudgePin || !newJudgeCatId) return;
+    if (!newJudgeName || !newJudgePin || !selectedCatId) return;
     const res = await fetch(`${apiUrl}/admin/judges`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newJudgeName, pin: newJudgePin, categoryId: newJudgeCatId })
+      body: JSON.stringify({ name: newJudgeName, pin: newJudgePin, categoryId: selectedCatId })
     });
     if (res.ok) {
       setNewJudgeName(""); setNewJudgePin("");
@@ -121,7 +128,6 @@ export default function AdminView() {
   const startTournament = (categoryId: string) => {
     if (!socket || !structure) return;
     socket.emit("admin_start_tournament", { tournamentId: structure.id, categoryId });
-    setTab("control");
   };
 
   const randomizeGroups = async (catId: string) => {
@@ -144,6 +150,7 @@ export default function AdminView() {
     await fetch(`${apiUrl}/admin/reset`, { method: 'POST' });
     socket?.emit("admin_reset");
     setStructure(null);
+    setSelectedCatId(null);
     fetchStructure();
   };
 
@@ -153,257 +160,324 @@ export default function AdminView() {
 
   // ───────── RENDER ─────────
   const categories = structure?.categories || [];
+  const activeCat = categories.find((c: any) => c.id === selectedCatId);
+  const isThisCatLive = state?.activeCategoryId === selectedCatId;
 
   return (
-    <div className="flex-1 flex flex-col bg-surface min-h-screen">
-      {/* Header */}
-      <header className="p-4 flex justify-between items-center border-b border-border bg-background">
-        <div>
-          <h1 className="text-2xl font-black uppercase text-white">Centro de Control</h1>
-          <p className="text-xs text-gray-500 font-mono">ADMIN • RNH</p>
-        </div>
-        <div className="flex gap-3 items-center">
-          <div className={`px-3 py-1 rounded-full text-xs font-bold ${connected ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
+    <div className="flex h-screen bg-surface overflow-hidden">
+
+      {/* ══════════ SIDEBAR ══════════ */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-30 w-64 bg-background border-r border-border flex flex-col
+        transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:relative md:translate-x-0
+      `}>
+        {/* Logo */}
+        <div className="p-4 border-b border-border">
+          <h1 className="text-lg font-black uppercase text-white tracking-wider">🎯 RNH</h1>
+          <p className="text-[10px] text-gray-500 font-mono mt-0.5">CENTRO DE CONTROL</p>
+          <div className={`inline-flex items-center gap-1.5 mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
             {connected ? "LIVE" : "OFFLINE"}
           </div>
-          <button onClick={resetTournament} className="text-xs text-red-500 hover:text-red-400 font-bold">Reset</button>
         </div>
-      </header>
 
-      {/* Tabs */}
-      <nav className="flex border-b border-border bg-background">
-        {(["config", "control", "results"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-3 text-sm font-bold uppercase transition-colors ${tab === t ? 'text-primary border-b-2 border-primary' : 'text-gray-500 hover:text-gray-300'}`}>
-            {t === "config" ? "⚙ Configuración" : t === "control" ? "🎮 Control" : "📊 Resultados"}
+        {/* Sync Section */}
+        <div className="p-3 border-b border-border">
+          <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Importar Participantes</label>
+          <div className="flex gap-1">
+            <input type="text" placeholder="URL Google Sheets..." value={sheetUrl} onChange={e => setSheetUrl(e.target.value)}
+              className="flex-1 bg-surface border border-border rounded px-2 py-1.5 text-white text-[11px] focus:border-primary focus:outline-none" />
+            <button onClick={handleSync} disabled={isSyncing || !sheetUrl}
+              className="bg-primary text-white font-bold px-2 rounded text-[11px] disabled:opacity-50">
+              {isSyncing ? "..." : "⬆"}
+            </button>
+          </div>
+        </div>
+
+        {/* Category List */}
+        <div className="flex-1 overflow-y-auto p-2">
+          <label className="text-[10px] text-gray-500 font-bold uppercase block mb-2 px-2">Categorías</label>
+          {categories.length === 0 && (
+            <p className="text-gray-600 text-xs text-center italic mt-4">Sin categorías aún</p>
+          )}
+          {categories.map((cat: any) => {
+            const isActive = selectedCatId === cat.id;
+            const isLive = state?.activeCategoryId === cat.id;
+            return (
+              <button key={cat.id} onClick={() => { setSelectedCatId(cat.id); setSidebarOpen(false); }}
+                className={`w-full text-left p-3 rounded-lg mb-1 transition-all ${
+                  isActive 
+                    ? 'bg-primary/15 border border-primary/50 text-white' 
+                    : 'hover:bg-surface text-gray-400 hover:text-white border border-transparent'
+                }`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold uppercase">{cat.name}</span>
+                  {isLive && <span className="text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full font-bold animate-pulse">EN VIVO</span>}
+                </div>
+                <div className="flex gap-2 mt-1 text-[10px] text-gray-500">
+                  <span>{cat.rounds?.[0]?.groups?.length || 0} grupos</span>
+                  <span>•</span>
+                  <span>{cat.judges?.length || 0} jueces</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="p-3 border-t border-border">
+          <button onClick={resetTournament} className="w-full text-xs text-red-500 hover:bg-red-500/10 p-2 rounded font-bold transition-colors">
+            🗑 Reiniciar Todo
           </button>
-        ))}
-      </nav>
+        </div>
+      </aside>
 
-      <div className="flex-1 overflow-auto p-4">
-        {/* ══════════ CONFIG TAB ══════════ */}
-        {tab === "config" && (
-          <div className="flex flex-col gap-6 max-w-3xl mx-auto">
-            {/* Google Sheets */}
-            <section className="bg-background border border-border p-5 rounded-xl">
-              <h2 className="text-lg font-bold text-white mb-4 uppercase border-l-4 border-primary pl-3">Participantes</h2>
-              <div className="flex gap-2">
-                <input type="text" placeholder="URL de Google Sheets..." value={sheetUrl} onChange={e => setSheetUrl(e.target.value)}
-                  className="flex-1 bg-surface border border-border rounded-lg p-3 text-white focus:border-primary focus:outline-none text-sm" />
-                <button onClick={handleSync} disabled={isSyncing || !sheetUrl}
-                  className="bg-primary text-white font-bold px-6 rounded-lg disabled:opacity-50 text-sm">
-                  {isSyncing ? "..." : "Sync"}
-                </button>
+      {/* Mobile overlay */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />}
+
+      {/* ══════════ MAIN CONTENT ══════════ */}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        
+        {/* Top bar (mobile) */}
+        <div className="md:hidden flex items-center gap-3 p-3 bg-background border-b border-border">
+          <button onClick={() => setSidebarOpen(true)} className="text-white text-xl">☰</button>
+          <span className="text-white font-bold text-sm uppercase">{activeCat?.name || "RNH Admin"}</span>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          {!activeCat ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="text-6xl mb-4">🛹</div>
+                <h2 className="text-xl font-black text-white mb-2">Roll Not Hate</h2>
+                <p className="text-gray-500 text-sm">
+                  {categories.length === 0 
+                    ? "Importa participantes desde Google Sheets para comenzar" 
+                    : "Selecciona una categoría del panel lateral"}
+                </p>
               </div>
-              <button onClick={fetchStructure} className="mt-2 text-xs text-gray-500 hover:text-white">⟳ Actualizar</button>
-            </section>
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto space-y-5">
+              
+              {/* ── HEADER ── */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-white uppercase">{activeCat.name}</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {activeCat.rounds?.[0]?.groups?.reduce((acc: number, g: any) => acc + (g.participants?.length || 0), 0) || 0} participantes
+                  </p>
+                </div>
+                {isThisCatLive && (
+                  <div className="bg-green-500/20 border border-green-500/50 text-green-400 px-3 py-1.5 rounded-full text-xs font-bold animate-pulse">
+                    ● EN VIVO
+                  </div>
+                )}
+              </div>
 
-            {/* Category Config */}
-            {categories.map((cat: any) => (
-              <section key={cat.id} className="bg-background border border-border p-5 rounded-xl">
-                <h3 className="text-lg font-black text-primary uppercase mb-4">{cat.name}</h3>
-                
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1">Pasadas</label>
-                    <input type="number" value={cat.pasadasCount} min={1} max={10}
-                      onChange={e => updateCat(cat.id, 'pasadasCount', parseInt(e.target.value))}
-                      className="w-full bg-surface border border-border rounded p-2 text-white text-center" />
+              {/* ── PARÁMETROS ── */}
+              <section className="bg-background border border-border rounded-xl p-4">
+                <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">⚙ Parámetros</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-surface p-3 rounded-lg text-center">
+                    <label className="text-[10px] text-gray-500 block mb-1 uppercase">Pasadas</label>
+                    <input type="number" defaultValue={activeCat.pasadasCount} min={1} max={10}
+                      onBlur={e => updateCat(activeCat.id, 'pasadasCount', parseInt(e.target.value))}
+                      className="w-full bg-transparent text-white font-black text-lg text-center focus:outline-none" />
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1">Grupo Size</label>
-                    <input type="number" value={cat.groupSize} min={2} max={10}
-                      onChange={e => updateCat(cat.id, 'groupSize', parseInt(e.target.value))}
-                      className="w-full bg-surface border border-border rounded p-2 text-white text-center" />
+                  <div className="bg-surface p-3 rounded-lg text-center">
+                    <label className="text-[10px] text-gray-500 block mb-1 uppercase">Tamaño Grupo</label>
+                    <input type="number" defaultValue={activeCat.groupSize} min={2} max={10}
+                      onBlur={e => updateCat(activeCat.id, 'groupSize', parseInt(e.target.value))}
+                      className="w-full bg-transparent text-white font-black text-lg text-center focus:outline-none" />
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1">% Clasif.</label>
-                    <input type="number" value={Math.round(cat.qualifyPercent * 100)} min={10} max={100}
-                      onChange={e => updateCat(cat.id, 'qualifyPercent', parseInt(e.target.value) / 100)}
-                      className="w-full bg-surface border border-border rounded p-2 text-white text-center" />
+                  <div className="bg-surface p-3 rounded-lg text-center">
+                    <label className="text-[10px] text-gray-500 block mb-1 uppercase">% Clasifican</label>
+                    <input type="number" defaultValue={Math.round(activeCat.qualifyPercent * 100)} min={10} max={100}
+                      onBlur={e => updateCat(activeCat.id, 'qualifyPercent', parseInt(e.target.value) / 100)}
+                      className="w-full bg-transparent text-white font-black text-lg text-center focus:outline-none" />
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-500 block mb-1">N° Jueces</label>
-                    <input type="number" value={cat.judgesCount} min={1} max={10}
-                      onChange={e => updateCat(cat.id, 'judgesCount', parseInt(e.target.value))}
-                      className="w-full bg-surface border border-border rounded p-2 text-white text-center" />
+                  <div className="bg-surface p-3 rounded-lg text-center">
+                    <label className="text-[10px] text-gray-500 block mb-1 uppercase">N° Jueces</label>
+                    <input type="number" defaultValue={activeCat.judgesCount} min={1} max={10}
+                      onBlur={e => updateCat(activeCat.id, 'judgesCount', parseInt(e.target.value))}
+                      className="w-full bg-transparent text-white font-black text-lg text-center focus:outline-none" />
                   </div>
                 </div>
+              </section>
 
-                {/* Judges */}
-                <h4 className="text-sm font-bold text-gray-400 uppercase mb-2 mt-4">Jueces ({cat.judges?.length || 0})</h4>
-                <div className="flex flex-col gap-2 mb-3">
-                  {cat.judges?.map((j: any) => (
-                    <div key={j.id} className="flex justify-between items-center bg-surface rounded-lg p-2 px-3">
-                      <span className="text-white text-sm">{j.name} <span className="text-gray-500">PIN: {j.pin}</span></span>
-                      <button onClick={() => deleteJudge(j.id)} className="text-red-500 text-xs hover:text-red-400">✕</button>
+              {/* ── JUECES ── */}
+              <section className="bg-background border border-border rounded-xl p-4">
+                <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">👨‍⚖️ Jueces ({activeCat.judges?.length || 0})</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                  {activeCat.judges?.map((j: any) => (
+                    <div key={j.id} className="flex justify-between items-center bg-surface rounded-lg p-2.5 px-3">
+                      <div>
+                        <span className="text-white text-sm font-bold">{j.name}</span>
+                        <span className="text-gray-500 text-xs ml-2">PIN: {j.pin}</span>
+                      </div>
+                      <button onClick={() => deleteJudge(j.id)} className="text-red-500 text-xs hover:text-red-400 ml-2">✕</button>
                     </div>
                   ))}
                 </div>
-
                 <div className="flex gap-2">
-                  <input type="text" placeholder="Nombre" value={newJudgeCatId === cat.id ? newJudgeName : ''} 
-                    onFocus={() => setNewJudgeCatId(cat.id)}
-                    onChange={e => { setNewJudgeName(e.target.value); setNewJudgeCatId(cat.id); }}
-                    className="flex-1 bg-surface border border-border rounded p-2 text-white text-sm" />
-                  <input type="text" placeholder="PIN" value={newJudgeCatId === cat.id ? newJudgePin : ''} 
-                    onFocus={() => setNewJudgeCatId(cat.id)}
-                    onChange={e => { setNewJudgePin(e.target.value); setNewJudgeCatId(cat.id); }}
-                    className="w-24 bg-surface border border-border rounded p-2 text-white text-sm text-center" />
-                  <button onClick={createJudge} className="bg-primary text-white font-bold px-4 rounded text-sm">+</button>
+                  <input type="text" placeholder="Nombre" value={newJudgeName} onChange={e => setNewJudgeName(e.target.value)}
+                    className="flex-1 bg-surface border border-border rounded px-3 py-2 text-white text-sm focus:border-primary focus:outline-none" />
+                  <input type="text" placeholder="PIN" value={newJudgePin} onChange={e => setNewJudgePin(e.target.value)}
+                    className="w-24 bg-surface border border-border rounded px-3 py-2 text-white text-sm text-center focus:border-primary focus:outline-none" />
+                  <button onClick={createJudge} className="bg-primary text-white font-bold px-4 rounded text-sm hover:bg-red-500 transition-colors">+</button>
                 </div>
+              </section>
 
-                {/* Start */}
-                <div className="flex flex-col sm:flex-row gap-2 w-full mt-4">
-                  <button onClick={() => randomizeGroups(cat.id)}
-                    className="bg-blue-600/30 border-2 border-blue-600 text-blue-400 font-bold p-3 rounded-xl hover:bg-blue-600 hover:text-white flex-1 transition-all shadow-lg text-sm sm:text-base">
-                    🎲 Realizar Sorteo
-                  </button>
-                  <button onClick={() => startTournament(cat.id)}
-                    className="bg-green-600 text-white font-bold p-3 rounded-xl hover:bg-green-500 flex-[2] uppercase tracking-wider shadow-lg text-sm sm:text-base">
-                    ▶ Inicio Clasificaciones — {cat.name}
-                  </button>
-                </div>
+              {/* ── ACCIONES PRE-TORNEO ── */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button onClick={() => randomizeGroups(activeCat.id)}
+                  className="bg-blue-600/20 border-2 border-blue-600 text-blue-400 font-bold p-3 rounded-xl hover:bg-blue-600 hover:text-white flex-1 transition-all text-sm">
+                  🎲 Realizar Sorteo
+                </button>
+                <button onClick={() => startTournament(activeCat.id)}
+                  className="bg-green-600 text-white font-bold p-3 rounded-xl hover:bg-green-500 flex-[2] uppercase tracking-wider text-sm">
+                  ▶ Inicio Clasificaciones
+                </button>
+              </div>
 
-                {/* Grupos preview */}
-                <div className="mt-4">
-                  {cat.rounds?.[0]?.groups?.map((g: any) => (
-                    <div key={g.id} className="mb-2">
-                      <span className="text-gray-500 text-xs font-bold uppercase">{g.name}</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {g.participants?.map((gp: any) => (
-                          <span key={gp.participant.id} className="bg-surface text-gray-400 text-xs px-2 py-1 rounded border border-border">
-                            {gp.participant.name}
-                          </span>
+              {/* ── GRUPOS ── */}
+              <section className="bg-background border border-border rounded-xl p-4">
+                <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">📋 Grupos</h3>
+                {activeCat.rounds?.[0]?.groups?.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {activeCat.rounds[0].groups.map((g: any) => (
+                      <div key={g.id} className="bg-surface rounded-lg p-3">
+                        <span className="text-primary text-xs font-bold uppercase block mb-2">{g.name}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {g.participants?.map((gp: any) => (
+                            <span key={gp.participant.id} className="bg-background text-gray-300 text-xs px-2 py-1 rounded border border-border">
+                              {gp.participant.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-600 text-xs italic text-center py-4">Sin grupos creados aún</p>
+                )}
+              </section>
+
+              {/* ── CONTROL EN VIVO ── */}
+              {isThisCatLive && (
+                <section className="bg-background border-2 border-green-600/30 rounded-xl p-4 space-y-4">
+                  <h3 className="text-xs font-bold text-green-400 uppercase">🎮 Control en Vivo</h3>
+                  
+                  {/* Estado */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
+                    <div className="bg-surface p-2 rounded-lg">
+                      <span className="text-[10px] text-gray-500 block uppercase">Fase</span>
+                      <span className="text-primary font-bold text-xs uppercase">{state?.status?.replace(/_/g, ' ') || '—'}</span>
+                    </div>
+                    <div className="bg-surface p-2 rounded-lg">
+                      <span className="text-[10px] text-gray-500 block uppercase">Grupo</span>
+                      <span className="text-white font-bold text-xs">{state?.activeGroupName || '—'}</span>
+                    </div>
+                    <div className="bg-surface p-2 rounded-lg">
+                      <span className="text-[10px] text-gray-500 block uppercase">Pasada</span>
+                      <span className="text-white font-bold text-xs">{state?.activePasadaNumber || 0} / {state?.totalPasadas || 0}</span>
+                    </div>
+                    <div className="bg-surface p-2 rounded-lg">
+                      <span className="text-[10px] text-gray-500 block uppercase">Consenso</span>
+                      <span className="text-white font-bold text-xs">{state?.consensus?.endPasada?.length || 0}/{state?.judgesRequired || 0}</span>
+                    </div>
+                  </div>
+
+                  {/* Participantes en el Spot */}
+                  {state?.status === "pasada_activa" && state?.groupParticipants?.length > 0 && (
+                    <div>
+                      <h4 className="text-[10px] text-gray-500 font-bold uppercase mb-2">Participantes en el Spot</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {state.groupParticipants.map((p: any) => (
+                          <button key={p.id} onClick={() => setActiveParticipant(p.id)}
+                            className={`p-2.5 rounded-lg text-xs font-bold transition-all ${
+                              state.activeParticipantId === p.id 
+                                ? 'bg-primary text-white shadow-lg shadow-primary/30 scale-[1.02]' 
+                                : 'bg-surface text-gray-400 hover:bg-gray-800 border border-border'
+                            }`}>
+                            {p.name}
+                          </button>
                         ))}
                       </div>
                     </div>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
+                  )}
 
-        {/* ══════════ CONTROL TAB ══════════ */}
-        {tab === "control" && (
-          <div className="flex flex-col gap-6 max-w-3xl mx-auto">
-            {/* Live status */}
-            <section className="bg-background border border-border p-5 rounded-xl">
-              <h2 className="text-lg font-bold text-white mb-3 uppercase border-l-4 border-primary pl-3">Estado en Vivo</h2>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="bg-surface p-3 rounded-lg">
-                  <span className="text-gray-500 block text-xs">FASE</span>
-                  <span className="text-primary font-bold uppercase">{state?.status?.replace(/_/g, ' ') || '—'}</span>
-                </div>
-                <div className="bg-surface p-3 rounded-lg">
-                  <span className="text-gray-500 block text-xs">CATEGORÍA</span>
-                  <span className="text-white font-bold">{state?.activeCategoryName || '—'}</span>
-                </div>
-                <div className="bg-surface p-3 rounded-lg">
-                  <span className="text-gray-500 block text-xs">GRUPO</span>
-                  <span className="text-white font-bold">{state?.activeGroupName || '—'}</span>
-                </div>
-                <div className="bg-surface p-3 rounded-lg">
-                  <span className="text-gray-500 block text-xs">PASADA</span>
-                  <span className="text-white font-bold">{state?.activePasadaNumber || 0} / {state?.totalPasadas || 0}</span>
-                </div>
-              </div>
-
-              {/* Consensus indicator */}
-              <div className="mt-3 bg-surface p-3 rounded-lg">
-                <span className="text-gray-500 text-xs block mb-1">CONSENSO JUECES</span>
-                <div className="flex gap-2 text-xs">
-                  <span className="text-gray-400">Terminar: {state?.consensus?.endPasada?.length || 0}/{state?.judgesRequired || 0}</span>
-                  <span className="text-gray-400">Siguiente: {state?.consensus?.nextPasada?.length || 0}/{state?.judgesRequired || 0}</span>
-                  <span className="text-gray-400">Grupo: {state?.consensus?.nextGroup?.length || 0}/{state?.judgesRequired || 0}</span>
-                </div>
-              </div>
-            </section>
-
-            {/* Participant selector */}
-            {state?.status === "pasada_activa" && state?.groupParticipants?.length > 0 && (
-              <section className="bg-background border border-border p-5 rounded-xl">
-                <h3 className="text-sm font-bold text-white uppercase mb-3">Participantes en el Spot</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {state.groupParticipants.map((p: any) => (
-                    <button key={p.id} onClick={() => setActiveParticipant(p.id)}
-                      className={`p-3 rounded-lg text-sm font-bold transition-all ${
-                        state.activeParticipantId === p.id 
-                          ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' 
-                          : 'bg-surface text-gray-400 hover:bg-gray-800 border border-border'
-                      }`}>
-                      {p.name}
+                  {/* Emergencia */}
+                  <div className="flex gap-2">
+                    <button onClick={forceClosePasada} className="flex-1 bg-red-900/30 text-red-400 font-bold py-2 rounded-lg hover:bg-red-900 text-xs border border-red-900/50">
+                      Forzar Cierre Pasada
                     </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Emergency buttons */}
-            <section className="bg-background border border-red-900/50 p-5 rounded-xl">
-              <h3 className="text-sm font-bold text-red-500 uppercase mb-3">⚠ Acciones de Emergencia</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={forceClosePasada} className="bg-red-900/50 text-red-400 font-bold py-3 rounded-lg hover:bg-red-900 text-sm">
-                  Forzar Cierre Pasada
-                </button>
-                <button onClick={forceNextGroup} className="bg-red-900/50 text-red-400 font-bold py-3 rounded-lg hover:bg-red-900 text-sm">
-                  Forzar Siguiente Grupo
-                </button>
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* ══════════ RESULTS TAB ══════════ */}
-        {tab === "results" && (
-          <div className="flex flex-col gap-6 max-w-3xl mx-auto">
-            {pasadaResults && (
-              <section className="bg-background border border-border p-5 rounded-xl">
-                <h3 className="text-lg font-bold text-white uppercase mb-3">Última Pasada ({pasadaResults.pasadaNumber})</h3>
-                {pasadaResults.ranking?.map((r: any) => (
-                  <div key={r.participantId} className="flex justify-between py-2 border-b border-border last:border-0">
-                    <span className="text-gray-300"><span className="text-primary font-bold mr-2">#{r.position}</span>{r.name}</span>
-                    <span className="text-white font-bold">{r.totalScore} pts</span>
+                    <button onClick={forceNextGroup} className="flex-1 bg-red-900/30 text-red-400 font-bold py-2 rounded-lg hover:bg-red-900 text-xs border border-red-900/50">
+                      Forzar Siguiente Grupo
+                    </button>
                   </div>
-                ))}
-              </section>
-            )}
+                </section>
+              )}
 
-            {classification && (
-              <section className="bg-background border border-green-900/50 p-5 rounded-xl">
-                <h3 className="text-lg font-bold text-green-500 uppercase mb-3">
-                  Clasificación (Top {Math.round(classification.qualifyPercent * 100)}%)
-                </h3>
-                <h4 className="text-sm text-green-400 font-bold mb-2">✅ Clasificados ({classification.qualified?.length})</h4>
-                {classification.qualified?.map((r: any) => (
-                  <div key={r.participantId} className="flex justify-between py-1 text-sm">
-                    <span className="text-green-300">#{r.globalPosition} {r.name}</span>
-                    <span className="text-white font-bold">{r.totalScore}</span>
-                  </div>
-                ))}
-                
-                <h4 className="text-sm text-red-400 font-bold mb-2 mt-4">❌ Eliminados ({classification.eliminated?.length})</h4>
-                {classification.eliminated?.map((r: any) => (
-                  <div key={r.participantId} className="flex justify-between py-1 text-sm">
-                    <span className="text-red-300/50">#{r.globalPosition} {r.name}</span>
-                    <span className="text-gray-500">{r.totalScore}</span>
-                  </div>
-                ))}
+              {/* ── RESULTADOS ── */}
+              {(pasadaResults || classification) && (
+                <section className="bg-background border border-border rounded-xl p-4 space-y-4">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase">📊 Resultados</h3>
 
-                <button onClick={() => generateNextRound(classification.qualified.map((q: any) => q.participantId))}
-                  className="mt-4 w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-500 uppercase">
-                  🏆 Inicio de Finales →
-                </button>
-              </section>
-            )}
+                  {pasadaResults && (
+                    <div>
+                      <h4 className="text-xs text-gray-400 font-bold mb-2">Última Pasada ({pasadaResults.pasadaNumber})</h4>
+                      {pasadaResults.ranking?.map((r: any) => (
+                        <div key={r.participantId} className="flex justify-between py-1.5 border-b border-border last:border-0 text-sm">
+                          <span className="text-gray-300"><span className="text-primary font-bold mr-2">#{r.position}</span>{r.name}</span>
+                          <span className="text-white font-bold">{r.totalScore} pts</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-            {!pasadaResults && !classification && (
-              <p className="text-gray-500 text-center italic mt-8">Los resultados aparecerán aquí conforme avance el torneo.</p>
-            )}
-          </div>
-        )}
-      </div>
+                  {classification && (
+                    <div className="border-t border-border pt-4">
+                      <h4 className="text-xs text-green-400 font-bold uppercase mb-2">
+                        Clasificación (Top {Math.round(classification.qualifyPercent * 100)}%)
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <span className="text-[10px] text-green-400 font-bold block mb-1">✅ Clasificados ({classification.qualified?.length})</span>
+                          {classification.qualified?.map((r: any) => (
+                            <div key={r.participantId} className="flex justify-between py-1 text-xs">
+                              <span className="text-green-300">#{r.globalPosition} {r.name}</span>
+                              <span className="text-white font-bold">{r.totalScore}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-red-400 font-bold block mb-1">❌ Eliminados ({classification.eliminated?.length})</span>
+                          {classification.eliminated?.map((r: any) => (
+                            <div key={r.participantId} className="flex justify-between py-1 text-xs">
+                              <span className="text-red-300/50">#{r.globalPosition} {r.name}</span>
+                              <span className="text-gray-500">{r.totalScore}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <button onClick={() => generateNextRound(classification.qualified.map((q: any) => q.participantId))}
+                        className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-500 uppercase text-sm">
+                        🏆 Inicio de Finales →
+                      </button>
+                    </div>
+                  )}
+                </section>
+              )}
+
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
