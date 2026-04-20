@@ -261,7 +261,7 @@ export default function AdminView() {
                   </button>
                   <button onClick={() => startTournament(cat.id)}
                     className="bg-green-600 text-white font-bold p-3 rounded-xl hover:bg-green-500 flex-[2] uppercase tracking-wider shadow-lg text-sm sm:text-base">
-                    ▶ Iniciar Torneo — {cat.name}
+                    ▶ Inicio Clasificaciones — {cat.name}
                   </button>
                 </div>
 
@@ -393,7 +393,7 @@ export default function AdminView() {
 
                 <button onClick={() => generateNextRound(classification.qualified.map((q: any) => q.participantId))}
                   className="mt-4 w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-500 uppercase">
-                  Generar Siguiente Ronda →
+                  🏆 Inicio de Finales →
                 </button>
               </section>
             )}
