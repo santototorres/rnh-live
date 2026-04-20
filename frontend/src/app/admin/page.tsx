@@ -222,7 +222,7 @@ export default function AdminView() {
   // Check readiness
   const totalParticipants = activeCat?.rounds?.[0]?.groups?.reduce((acc: number, g: any) => acc + (g.participants?.length || 0), 0) || 0;
   const totalJudges = activeCat?.judges?.length || 0;
-  const paramsReady = editParams.pasadasCount > 0 && editParams.groupSize > 0 && editParams.qualifyPercent > 0 && editParams.judgesCount > 0;
+  const paramsReady = editParams.pasadasCount > 0 && editParams.groupSize > 0 && editParams.qualifyCount > 0 && editParams.judgesCount > 0;
   const judgesReady = totalJudges >= (editParams.judgesCount || 1);
   const canStart = paramsReady && judgesReady && totalParticipants > 0;
 
