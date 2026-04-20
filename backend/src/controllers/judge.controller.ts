@@ -11,7 +11,7 @@ export const loginJudge = async (req: Request, res: Response) => {
 
     const judge = await prisma.judge.findUnique({
       where: { pin },
-      include: { category: true }
+      include: { tournament: true }
     });
 
     if (!judge) {
@@ -22,8 +22,7 @@ export const loginJudge = async (req: Request, res: Response) => {
       id: judge.id,
       name: judge.name,
       pin: judge.pin,
-      categoryId: judge.categoryId,
-      categoryName: judge.category.name
+      tournamentId: judge.tournamentId
     });
 
   } catch (error: any) {

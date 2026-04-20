@@ -133,8 +133,19 @@ export const randomizeGroups = async (req: Request, res: Response) => {
         ));
       }
     }
+    // Fetch the formed groups with participant names
+    const formedGroups = await prisma.group.findMany({
+      where: { roundId: round1.id },
+      orderBy: { name: 'asc' },
+      include: { participants: { include: { participant: true }, orderBy: { order: 'asc' } } }
+    });
 
-    res.status(200).json({ message: "Grupos mezclados aleatoriamente." });
+    const groupsData = formedGroups.map(g => ({
+      name: g.name,
+      participants: g.participants.map(gp => gp.participant.name)
+    }));
+
+    res.status(200).json({ message: "Grupos mezclados aleatoriamente.", groups: groupsData });
   } catch (error) {
     console.error("Error randomizeGroups:", error);
     res.status(500).json({ error: "Internal Server Error" });
@@ -147,9 +158,10 @@ export const getStructure = async (_req: Request, res: Response) => {
   try {
     const tournament = await prisma.tournament.findFirst({
       include: {
+        judges: true,
         categories: {
           include: {
-            judges: true,
+            participants: true,
             rounds: {
               include: {
                 groups: {
@@ -183,15 +195,14 @@ export const getStructure = async (_req: Request, res: Response) => {
 export const updateCategory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { pasadasCount, groupSize, qualifyCount, judgesCount } = req.body;
+    const { pasadasCount, groupSize, qualifyCount } = req.body;
 
     const updated = await prisma.category.update({
       where: { id: id as string },
       data: {
         ...(pasadasCount !== undefined && { pasadasCount }),
         ...(groupSize !== undefined && { groupSize }),
-        ...(qualifyCount !== undefined && { qualifyCount }),
-        ...(judgesCount !== undefined && { judgesCount })
+        ...(qualifyCount !== undefined && { qualifyCount })
       }
     });
 
@@ -237,16 +248,16 @@ export const updateCategory = async (req: Request, res: Response) => {
 
 export const createJudge = async (req: Request, res: Response) => {
   try {
-    const { name, pin, categoryId } = req.body;
-    if (!name || !pin || !categoryId) {
-      return res.status(400).json({ error: "name, pin, and categoryId are required" });
+    const { name, pin, tournamentId } = req.body;
+    if (!name || !pin || !tournamentId) {
+      return res.status(400).json({ error: "name, pin, and tournamentId are required" });
     }
 
     const existing = await prisma.judge.findUnique({ where: { pin } });
     if (existing) return res.status(409).json({ error: "PIN already exists" });
 
     const judge = await prisma.judge.create({
-      data: { name, pin, categoryId }
+      data: { name, pin, tournamentId }
     });
 
     res.status(201).json(judge);
@@ -258,10 +269,10 @@ export const createJudge = async (req: Request, res: Response) => {
 
 export const getJudges = async (req: Request, res: Response) => {
   try {
-    const categoryId = req.query.categoryId as string | undefined;
+    const tournamentId = req.query.tournamentId as string | undefined;
     const judges = await prisma.judge.findMany({
-      where: categoryId ? { categoryId } : {},
-      include: { category: true }
+      where: tournamentId ? { tournamentId } : {},
+      include: { tournament: true }
     });
     res.status(200).json(judges);
   } catch (error) {
@@ -324,22 +335,48 @@ export const resetCategory = async (req: Request, res: Response) => {
     const cat = await prisma.category.findUnique({ where: { id: categoryId } });
     if (!cat) return res.status(404).json({ error: "No encontrada" });
 
-    const participants = await prisma.participant.findMany({ where: { categoryId } });
-    const participantIds = participants.map(p => p.id);
-
+    // Get rounds and groups for this category
     const rounds = await prisma.round.findMany({ where: { categoryId } });
     const roundIds = rounds.map(r => r.id);
 
+    // Delete scores for this category's rounds
+    if (roundIds.length > 0) {
+      await prisma.score.deleteMany({ where: { roundId: { in: roundIds } } });
+    }
+
+    // Delete group participants and groups
     const groups = await prisma.group.findMany({ where: { roundId: { in: roundIds } } });
     const groupIds = groups.map(g => g.id);
+    if (groupIds.length > 0) {
+      await prisma.groupParticipant.deleteMany({ where: { groupId: { in: groupIds } } });
+      await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
+    }
 
-    await prisma.score.deleteMany({ where: { participantId: { in: participantIds } } });
-    await prisma.groupParticipant.deleteMany({ where: { groupId: { in: groupIds } } });
-    await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
-    await prisma.round.deleteMany({ where: { id: { in: roundIds } } });
-    await prisma.participant.deleteMany({ where: { categoryId } });
-    await prisma.judge.deleteMany({ where: { categoryId } });
-    
+    // Delete rounds
+    await prisma.round.deleteMany({ where: { categoryId } });
+
+    // Recreate Round 1 with participants reshuffled
+    const participants = await prisma.participant.findMany({ where: { categoryId } });
+    if (participants.length > 0) {
+      const round1 = await prisma.round.create({ data: { number: 1, categoryId } });
+      const shuffled = [...participants].sort(() => Math.random() - 0.5);
+      const chunks = [];
+      for (let i = 0; i < shuffled.length; i += cat.groupSize) {
+        chunks.push(shuffled.slice(i, i + cat.groupSize));
+      }
+      for (let i = 0; i < chunks.length; i++) {
+        const group = await prisma.group.create({
+          data: { name: `Grupo ${i + 1}`, roundId: round1.id }
+        });
+        await Promise.all(chunks[i].map((p, index) =>
+          prisma.groupParticipant.create({
+            data: { groupId: group.id, participantId: p.id, order: index + 1 }
+          })
+        ));
+      }
+    }
+
+    // Reset SystemState if this category was active
     const state = await prisma.systemState.findUnique({ where: { id: 'global' } });
     if (state && state.activeCategoryId === categoryId) {
       await prisma.systemState.update({
@@ -359,9 +396,7 @@ export const resetCategory = async (req: Request, res: Response) => {
       });
     }
 
-    await prisma.category.delete({ where: { id: categoryId } });
-
-    res.status(200).json({ message: "Category reset complete" });
+    res.status(200).json({ message: "Datos de categoría limpiados. Participantes y categoría intactos." });
   } catch (error) {
     console.error("Error resetCategory:", error);
     res.status(500).json({ error: "Internal Server Error" });

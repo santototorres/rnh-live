@@ -85,8 +85,12 @@ async function buildBroadcastState() {
     const cat = await prisma.category.findUnique({ where: { id: state.activeCategoryId } });
     if (cat) {
       totalPasadas = cat.pasadasCount;
-      judgesRequired = cat.judgesCount;
     }
+  }
+
+  if (state.activeTournamentId) {
+    const tJudges = await prisma.judge.count({ where: { tournamentId: state.activeTournamentId } });
+    judgesRequired = tJudges > 0 ? tJudges : 3;
   }
 
   if (state.activeGroupId) {
@@ -100,7 +104,23 @@ async function buildBroadcastState() {
     activeRoundNumber = r?.number || null;
   }
 
+  let pasadaResults: any = null;
+  let classification: any = null;
+
+  if (state.status === 'pasada_cerrada' && state.activeGroupId && state.activeRoundId) {
+    pasadaResults = {
+      pasadaNumber: state.activePasadaNumber,
+      ranking: await calculatePasadaRanking(state.activeGroupId, state.activeRoundId, state.activePasadaNumber)
+    };
+  }
+
+  if (state.status === 'ronda_cerrada' && state.activeRoundId && state.activeCategoryId) {
+    classification = await calculateRoundClassification(state.activeRoundId, state.activeCategoryId);
+  }
+
   return {
+    pasadaResults,
+    classification,
     status: state.status,
     activeTournamentId: state.activeTournamentId,
     activeCategoryId: state.activeCategoryId,
@@ -199,7 +219,9 @@ io.on('connection', (socket) => {
     const cat = await prisma.category.findUnique({ where: { id: state.activeCategoryId } });
     if (!cat) return;
 
-    const result = await registerConsensus(data.judgeId, 'consensusEndPasada', cat.judgesCount);
+    const tJudges = await prisma.judge.count({ where: { tournamentId: state.activeTournamentId! } });
+    const reqJudges = tJudges > 0 ? tJudges : 3;
+    const result = await registerConsensus(data.judgeId, 'consensusEndPasada', reqJudges);
     console.log(`Consenso terminar pasada: ${result.total}/${result.required}`);
 
     // Broadcast consensus progress
@@ -235,7 +257,9 @@ io.on('connection', (socket) => {
     const cat = await prisma.category.findUnique({ where: { id: state.activeCategoryId } });
     if (!cat) return;
 
-    const result = await registerConsensus(data.judgeId, 'consensusNextPasada', cat.judgesCount);
+    const tJudges = await prisma.judge.count({ where: { tournamentId: state.activeTournamentId! } });
+    const reqJudges = tJudges > 0 ? tJudges : 3;
+    const result = await registerConsensus(data.judgeId, 'consensusNextPasada', reqJudges);
     console.log(`Consenso siguiente pasada: ${result.total}/${result.required}`);
 
     io.emit('consensus_progress', { type: 'nextPasada', ...result });
@@ -288,7 +312,9 @@ io.on('connection', (socket) => {
     const cat = await prisma.category.findUnique({ where: { id: state.activeCategoryId } });
     if (!cat) return;
 
-    const result = await registerConsensus(data.judgeId, 'consensusNextGroup', cat.judgesCount);
+    const tJudges = await prisma.judge.count({ where: { tournamentId: state.activeTournamentId! } });
+    const reqJudges = tJudges > 0 ? tJudges : 3;
+    const result = await registerConsensus(data.judgeId, 'consensusNextGroup', reqJudges);
     console.log(`Consenso siguiente grupo: ${result.total}/${result.required}`);
 
     io.emit('consensus_progress', { type: 'nextGroup', ...result });
@@ -448,15 +474,15 @@ io.on('connection', (socket) => {
   });
 
   // ── ADMIN: Emit Configured Params for Live Screen ──
-  socket.on('admin_category_configured', (data: { categoryName: string; pasadasCount: number; groupSize: number; qualifyCount: number; judgesCount: number }) => {
+  socket.on('admin_category_configured', (data: { categoryName: string; pasadasCount: number; groupSize: number; qualifyCount: number }) => {
     io.emit('live_category_configured', data);
     console.log('Category configured for live screen:', data.categoryName);
   });
 
-  // ── ADMIN: Trigger Raffle Animation on Live Screen ──
-  socket.on('admin_raffle_start', (data: { type: 'clasificaciones' | 'finales'; participants: string[] }) => {
-    io.emit('live_raffle_start', data);
-    console.log(`Raffle started for ${data.type}`);
+  // ── ADMIN: Send formed groups to Live Screen ──
+  socket.on('admin_raffle_done', (data: { type: string; categoryName: string; groups: any[] }) => {
+    io.emit('live_raffle_done', data);
+    console.log(`Raffle done for ${data.type}: ${data.groups.length} groups`);
   });
 
   // ── ADMIN: Generate next round ──

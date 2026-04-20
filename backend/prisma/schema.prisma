@@ -14,13 +14,13 @@ model Tournament {
   updatedAt DateTime @updatedAt
 
   categories Category[]
+  judges     Judge[]
 }
 
 model Category {
   id             String      @id @default(cuid())
   name           String
   tournamentId   String
-  judgesCount    Int         @default(3)
   groupSize      Int         @default(4)
   pasadasCount   Int         @default(2)    // number of runs per group
   qualifyCount   Int         @default(5)    // exact count of participants to qualify
@@ -28,15 +28,14 @@ model Category {
   
   participants   Participant[]
   rounds         Round[]
-  judges         Judge[]
 }
 
 model Judge {
-  id         String   @id @default(cuid())
-  name       String
-  pin        String   @unique
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  name         String
+  pin          String     @unique
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   
   scores     Score[]
 }

@@ -51,8 +51,7 @@ export default function AdminView() {
       setEditParams({
         pasadasCount: cat.pasadasCount,
         groupSize: cat.groupSize,
-        qualifyCount: cat.qualifyCount,
-        judgesCount: cat.judgesCount
+        qualifyCount: cat.qualifyCount
       });
     }
   }, [selectedCatId, structure]);
@@ -60,7 +59,11 @@ export default function AdminView() {
   useEffect(() => {
     if (!socket) return;
     socket.emit("request_state");
-    socket.on("state_update", (s) => setState(s));
+    socket.on("state_update", (s) => {
+      setState(s);
+      if (s.pasadaResults) setPasadaResults(s.pasadaResults);
+      if (s.classification) setClassification(s.classification);
+    });
     socket.on("pasada_results", (d) => setPasadaResults(d));
     socket.on("round_classification", (d) => setClassification(d));
     return () => {
@@ -117,8 +120,7 @@ export default function AdminView() {
         body: JSON.stringify({
           pasadasCount: editParams.pasadasCount,
           groupSize: editParams.groupSize,
-          qualifyCount: editParams.qualifyCount,
-          judgesCount: editParams.judgesCount
+          qualifyCount: editParams.qualifyCount
         })
       });
       // Emit to live screen
@@ -126,8 +128,7 @@ export default function AdminView() {
         categoryName: cat?.name || '',
         pasadasCount: editParams.pasadasCount,
         groupSize: editParams.groupSize,
-        qualifyCount: editParams.qualifyCount,
-        judgesCount: editParams.judgesCount
+        qualifyCount: editParams.qualifyCount
       });
       alert("✅ Parámetros guardados correctamente");
       fetchStructure();
@@ -136,11 +137,11 @@ export default function AdminView() {
 
   // ── Judge CRUD ──
   const createJudge = async () => {
-    if (!newJudgeName || !newJudgePin || !selectedCatId) return;
+    if (!newJudgeName || !newJudgePin || !structure?.id) return;
     const res = await fetch(`${apiUrl}/admin/judges`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newJudgeName, pin: newJudgePin, categoryId: selectedCatId })
+      body: JSON.stringify({ name: newJudgeName, pin: newJudgePin, tournamentId: structure.id })
     });
     if (res.ok) {
       setNewJudgeName(""); setNewJudgePin("");
@@ -168,9 +169,13 @@ export default function AdminView() {
     try {
       const res = await fetch(`${apiUrl}/admin/category/${catId}/randomize`, { method: 'POST' });
       if (res.ok) {
+        const data = await res.json();
         const cat = structure?.categories?.find((c: any) => c.id === catId);
-        const allNames = cat?.participants?.map((p: any) => p.name) || [];
-        socket?.emit('admin_raffle_start', { type: 'clasificaciones', participants: allNames });
+        socket?.emit('admin_raffle_done', { 
+          type: 'clasificaciones', 
+          categoryName: cat?.name || '',
+          groups: data.groups 
+        });
         fetchStructure();
       }
       else alert("Error al realizar el sorteo");
@@ -194,13 +199,11 @@ export default function AdminView() {
   };
 
   const resetCategory = async (catId: string) => {
-    if (!confirm("⚠️ ¿Borrar TODOS los datos de esta categoría? Se eliminarán grupos, jueces, participantes y puntajes. Esta acción es irreversible.")) return;
+    if (!confirm("⚠️ ¿Limpiar TODOS los datos de competencia de esta categoría? (Los participantes se mantendrán)")) return;
     try {
       const res = await fetch(`${apiUrl}/admin/category/${catId}/reset`, { method: 'POST' });
       if (res.ok) {
-        socket?.emit("admin_reset"); // Emits global state update if active
-        setStructure(null);
-        setSelectedCatId(null);
+        // Just fetch new structure, keep category selected
         fetchStructure();
       } else {
         alert("Error al reiniciar la categoría");
@@ -221,9 +224,9 @@ export default function AdminView() {
 
   // Check readiness
   const totalParticipants = activeCat?.rounds?.[0]?.groups?.reduce((acc: number, g: any) => acc + (g.participants?.length || 0), 0) || 0;
-  const totalJudges = activeCat?.judges?.length || 0;
-  const paramsReady = editParams.pasadasCount > 0 && editParams.groupSize > 0 && editParams.qualifyCount > 0 && editParams.judgesCount > 0;
-  const judgesReady = totalJudges >= (editParams.judgesCount || 1);
+  const totalJudges = structure?.judges?.length || 0;
+  const paramsReady = editParams.pasadasCount > 0 && editParams.groupSize > 0 && editParams.qualifyCount > 0;
+  const judgesReady = totalJudges > 0;
   const canStart = paramsReady && judgesReady && totalParticipants > 0;
 
   return (
@@ -258,6 +261,24 @@ export default function AdminView() {
           </div>
         </div>
 
+        {/* Global Judges */}
+        <div className="p-3 border-b border-border">
+          <label className="text-[10px] text-gray-500 font-bold uppercase block mb-2">📋 Jueces Globales</label>
+          <div className="flex flex-col gap-2 mb-2 max-h-32 overflow-y-auto">
+            {structure?.judges?.map((j: any) => (
+              <div key={j.id} className="flex justify-between items-center bg-surface p-2 rounded text-xs border border-border">
+                 <span><span className="font-bold">{j.name}</span> <span className="text-gray-500 ml-1">({j.pin})</span></span>
+                 <button onClick={() => deleteJudge(j.id)} className="text-red-500 hover:text-red-300">✕</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-1 mt-2">
+            <input type="text" placeholder="Nombre" value={newJudgeName} onChange={e => setNewJudgeName(e.target.value)} className="w-[45%] bg-surface border border-border rounded px-2 py-1 text-white text-[10px] focus:outline-none focus:border-primary" />
+            <input type="text" placeholder="PIN" value={newJudgePin} onChange={e => setNewJudgePin(e.target.value)} className="w-[35%] bg-surface border border-border rounded px-2 py-1 text-white text-[10px] text-center focus:outline-none focus:border-primary" />
+            <button onClick={createJudge} className="w-[20%] bg-primary text-white font-bold rounded text-[11px]">+</button>
+          </div>
+        </div>
+
         {/* Category List */}
         <div className="flex-1 overflow-y-auto p-2">
           <label className="text-[10px] text-gray-500 font-bold uppercase block mb-2 px-2">Categorías</label>
@@ -280,8 +301,6 @@ export default function AdminView() {
                 </div>
                 <div className="flex gap-2 mt-1 text-[10px] text-gray-500">
                   <span>{cat.rounds?.[0]?.groups?.length || 0} grupos</span>
-                  <span>•</span>
-                  <span>{cat.judges?.length || 0} jueces</span>
                 </div>
               </button>
             );
@@ -379,12 +398,6 @@ export default function AdminView() {
                       onChange={e => setEditParams(prev => ({ ...prev, qualifyCount: parseInt(e.target.value) || 0 }))}
                       className="w-full bg-transparent text-white font-black text-2xl text-center focus:outline-none border-b-2 border-border focus:border-primary transition-colors" />
                   </div>
-                  <div className="bg-surface p-4 rounded-lg text-center">
-                    <label className="text-[10px] text-gray-500 block mb-2 uppercase font-bold">N° Jueces</label>
-                    <input type="number" value={editParams.judgesCount ?? 0} min={0} max={10}
-                      onChange={e => setEditParams(prev => ({ ...prev, judgesCount: parseInt(e.target.value) || 0 }))}
-                      className="w-full bg-transparent text-white font-black text-2xl text-center focus:outline-none border-b-2 border-border focus:border-primary transition-colors" />
-                  </div>
                 </div>
 
                 {!paramsReady && (
@@ -393,46 +406,17 @@ export default function AdminView() {
               </section>
 
               {/* ═══════════════════════════════════════════ */}
-              {/* STEP 2: JUECES                              */}
+              {/* STEP 2: SORTEO + INICIO                     */}
               {/* ═══════════════════════════════════════════ */}
               <section className="bg-background border border-border rounded-xl p-5">
-                <h3 className="text-sm font-bold text-gray-400 uppercase mb-4">
-                  ② Jueces ({totalJudges}/{editParams.judgesCount || 0})
-                  {judgesReady && <span className="text-green-400 ml-2">✓</span>}
-                  {!judgesReady && totalJudges > 0 && <span className="text-yellow-500 ml-2">— faltan {(editParams.judgesCount || 0) - totalJudges}</span>}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-                  {activeCat.judges?.map((j: any) => (
-                    <div key={j.id} className="flex justify-between items-center bg-surface rounded-lg p-2.5 px-3">
-                      <div>
-                        <span className="text-white text-sm font-bold">{j.name}</span>
-                        <span className="text-gray-500 text-xs ml-2">PIN: {j.pin}</span>
-                      </div>
-                      <button onClick={() => deleteJudge(j.id)} className="text-red-500 text-xs hover:text-red-400 ml-2">✕</button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input type="text" placeholder="Nombre del juez" value={newJudgeName} onChange={e => setNewJudgeName(e.target.value)}
-                    className="flex-1 bg-surface border border-border rounded px-3 py-2 text-white text-sm focus:border-primary focus:outline-none" />
-                  <input type="text" placeholder="PIN" value={newJudgePin} onChange={e => setNewJudgePin(e.target.value)}
-                    className="w-24 bg-surface border border-border rounded px-3 py-2 text-white text-sm text-center focus:border-primary focus:outline-none" />
-                  <button onClick={createJudge} className="bg-primary text-white font-bold px-4 rounded text-sm hover:bg-red-500 transition-colors">+</button>
-                </div>
-              </section>
-
-              {/* ═══════════════════════════════════════════ */}
-              {/* STEP 3: SORTEO + INICIO                     */}
-              {/* ═══════════════════════════════════════════ */}
-              <section className="bg-background border border-border rounded-xl p-5">
-                <h3 className="text-sm font-bold text-gray-400 uppercase mb-4">③ Sorteo e Inicio</h3>
+                <h3 className="text-sm font-bold text-gray-400 uppercase mb-4">② Sorteo e Inicio</h3>
                 
                 {!canStart && (
                   <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4 text-xs text-yellow-400">
                     <p className="font-bold mb-1">⚠ Requisitos pendientes:</p>
                     <ul className="list-disc list-inside space-y-0.5">
                       {!paramsReady && <li>Configura y guarda los parámetros (paso ①)</li>}
-                      {!judgesReady && <li>Agrega al menos {editParams.judgesCount || 0} jueces (paso ②)</li>}
+                      {!judgesReady && <li>Agrega al menos 1 juez en el panel lateral</li>}
                       {totalParticipants === 0 && <li>Importa participantes desde Google Sheets</li>}
                     </ul>
                   </div>
@@ -651,10 +635,6 @@ export default function AdminView() {
                                 <div className="text-center">
                                   <label className="text-[9px] text-gray-500 uppercase font-bold">N° Clasifican</label>
                                   <input type="number" min={0} value={editParams.qualifyCount ?? 0} onChange={e => setEditParams(prev => ({ ...prev, qualifyCount: parseInt(e.target.value) || 0 }))} className="w-full bg-background mt-1 text-white text-sm text-center p-1.5 rounded border border-border focus:border-primary focus:outline-none" />
-                                </div>
-                                <div className="text-center">
-                                  <label className="text-[9px] text-gray-500 uppercase font-bold">N° Jueces</label>
-                                  <input type="number" min={1} value={editParams.judgesCount ?? 0} onChange={e => setEditParams(prev => ({ ...prev, judgesCount: parseInt(e.target.value) || 0 }))} className="w-full bg-background mt-1 text-white text-sm text-center p-1.5 rounded border border-border focus:border-primary focus:outline-none" />
                                 </div>
                               </div>
                             </div>
