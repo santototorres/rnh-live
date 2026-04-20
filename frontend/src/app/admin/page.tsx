@@ -65,11 +65,11 @@ export default function AdminView() {
             const res = await fetch(`${apiUrl}/admin/upload`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ participants: results.data, groupSize: 4 })
+              body: JSON.stringify({ participants: results.data })
             });
             const data = await res.json();
             if (res.ok) {
-              alert(`✅ ${data.totalParticipants} rollers en ${data.totalGroups} Heats`);
+              alert(`✅ ${data.totalParticipants} rollers en ${data.totalGroups} Grupos`);
               fetchStructure();
             } else alert(`Error: ${data.error}`);
           } catch { alert("Error de conexión"); }
