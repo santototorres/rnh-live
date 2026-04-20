@@ -13,7 +13,7 @@ const loginJudge = async (req, res) => {
         }
         const judge = await db_1.default.judge.findUnique({
             where: { pin },
-            include: { category: true }
+            include: { tournament: true }
         });
         if (!judge) {
             return res.status(401).json({ error: "PIN no encontrado. Contacta al administrador." });
@@ -22,8 +22,7 @@ const loginJudge = async (req, res) => {
             id: judge.id,
             name: judge.name,
             pin: judge.pin,
-            categoryId: judge.categoryId,
-            categoryName: judge.category.name
+            tournamentId: judge.tournamentId
         });
     }
     catch (error) {

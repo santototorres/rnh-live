@@ -16,7 +16,12 @@ export const uploadParticipantsUrl = async (req: Request, res: Response) => {
       if (match?.[1]) docId = match[1];
       csvUrl = `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`;
     }
-    const response = await fetch(csvUrl);
+    
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(csvUrl, { signal: controller.signal as any });
+    clearTimeout(timeout);
+    
     if (!response.ok) {
       return res.status(400).json({ error: "No se pudo descargar. Verifica que el enlace a la hoja de cálculo sea público (Cualquier persona con el enlace)." });
     }

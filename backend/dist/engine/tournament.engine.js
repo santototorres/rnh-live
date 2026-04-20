@@ -113,22 +113,21 @@ async function calculateGroupRanking(groupId, roundId, totalPasadas) {
 }
 /**
  * Calculate classification for an entire round.
- * Gathers all group rankings and selects the top qualifyPercent.
+ * Gathers all group rankings and selects the top qualifyCount.
  */
 async function calculateRoundClassification(roundId, categoryId) {
     const category = await db_1.default.category.findUnique({ where: { id: categoryId } });
     if (!category)
-        return { qualified: [], eliminated: [], qualifyPercent: 0 };
+        return { qualified: [], eliminated: [], qualifyCount: 0 };
     const round = await db_1.default.round.findUnique({
         where: { id: roundId },
         include: { groups: true }
     });
     if (!round)
-        return { qualified: [], eliminated: [], qualifyPercent: category.qualifyPercent };
-    // Collect all participants across all groups with their accumulated scores
+        return { qualified: [], eliminated: [], qualifyCount: category.qualifyCount };
     let allParticipants = [];
     for (const group of round.groups) {
-        const ranking = await calculateGroupRanking(group.id, roundId, category.pasadasCount);
+        const ranking = await calculateGroupRanking(group.id, round.id, category.pasadasCount);
         allParticipants.push(...ranking);
     }
     // Sort all participants globally
@@ -137,13 +136,12 @@ async function calculateRoundClassification(roundId, categoryId) {
             return b.totalScore - a.totalScore;
         return b.bestScore - a.bestScore;
     });
-    const qualifyCount = Math.ceil(allParticipants.length * category.qualifyPercent);
+    const qualifyCount = category.qualifyCount;
     const qualified = allParticipants.slice(0, qualifyCount);
     const eliminated = allParticipants.slice(qualifyCount);
     return {
         qualified: qualified.map((p, i) => ({ ...p, globalPosition: i + 1 })),
         eliminated: eliminated.map((p, i) => ({ ...p, globalPosition: qualifyCount + i + 1 })),
-        qualifyPercent: category.qualifyPercent,
         qualifyCount,
         totalParticipants: allParticipants.length,
         roundNumber: round.number,

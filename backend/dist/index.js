@@ -65,8 +65,11 @@ async function buildBroadcastState() {
         const cat = await db_1.default.category.findUnique({ where: { id: state.activeCategoryId } });
         if (cat) {
             totalPasadas = cat.pasadasCount;
-            judgesRequired = cat.judgesCount;
         }
+    }
+    if (state.activeTournamentId) {
+        const tJudges = await db_1.default.judge.count({ where: { tournamentId: state.activeTournamentId } });
+        judgesRequired = tJudges > 0 ? tJudges : 3;
     }
     if (state.activeGroupId) {
         const g = await db_1.default.group.findUnique({ where: { id: state.activeGroupId } });
@@ -77,7 +80,20 @@ async function buildBroadcastState() {
         const r = await db_1.default.round.findUnique({ where: { id: state.activeRoundId } });
         activeRoundNumber = r?.number || null;
     }
+    let pasadaResults = null;
+    let classification = null;
+    if (state.status === 'pasada_cerrada' && state.activeGroupId && state.activeRoundId) {
+        pasadaResults = {
+            pasadaNumber: state.activePasadaNumber,
+            ranking: await (0, tournament_engine_1.calculatePasadaRanking)(state.activeGroupId, state.activeRoundId, state.activePasadaNumber)
+        };
+    }
+    if (state.status === 'ronda_cerrada' && state.activeRoundId && state.activeCategoryId) {
+        classification = await (0, tournament_engine_1.calculateRoundClassification)(state.activeRoundId, state.activeCategoryId);
+    }
     return {
+        pasadaResults,
+        classification,
         status: state.status,
         activeTournamentId: state.activeTournamentId,
         activeCategoryId: state.activeCategoryId,
@@ -169,7 +185,9 @@ io.on('connection', (socket) => {
         const cat = await db_1.default.category.findUnique({ where: { id: state.activeCategoryId } });
         if (!cat)
             return;
-        const result = await (0, consensus_manager_1.registerConsensus)(data.judgeId, 'consensusEndPasada', cat.judgesCount);
+        const tJudges = await db_1.default.judge.count({ where: { tournamentId: state.activeTournamentId } });
+        const reqJudges = tJudges > 0 ? tJudges : 3;
+        const result = await (0, consensus_manager_1.registerConsensus)(data.judgeId, 'consensusEndPasada', reqJudges);
         console.log(`Consenso terminar pasada: ${result.total}/${result.required}`);
         // Broadcast consensus progress
         io.emit('consensus_progress', { type: 'endPasada', ...result });
@@ -194,7 +212,9 @@ io.on('connection', (socket) => {
         const cat = await db_1.default.category.findUnique({ where: { id: state.activeCategoryId } });
         if (!cat)
             return;
-        const result = await (0, consensus_manager_1.registerConsensus)(data.judgeId, 'consensusNextPasada', cat.judgesCount);
+        const tJudges = await db_1.default.judge.count({ where: { tournamentId: state.activeTournamentId } });
+        const reqJudges = tJudges > 0 ? tJudges : 3;
+        const result = await (0, consensus_manager_1.registerConsensus)(data.judgeId, 'consensusNextPasada', reqJudges);
         console.log(`Consenso siguiente pasada: ${result.total}/${result.required}`);
         io.emit('consensus_progress', { type: 'nextPasada', ...result });
         if (result.reached) {
@@ -235,7 +255,9 @@ io.on('connection', (socket) => {
         const cat = await db_1.default.category.findUnique({ where: { id: state.activeCategoryId } });
         if (!cat)
             return;
-        const result = await (0, consensus_manager_1.registerConsensus)(data.judgeId, 'consensusNextGroup', cat.judgesCount);
+        const tJudges = await db_1.default.judge.count({ where: { tournamentId: state.activeTournamentId } });
+        const reqJudges = tJudges > 0 ? tJudges : 3;
+        const result = await (0, consensus_manager_1.registerConsensus)(data.judgeId, 'consensusNextGroup', reqJudges);
         console.log(`Consenso siguiente grupo: ${result.total}/${result.required}`);
         io.emit('consensus_progress', { type: 'nextGroup', ...result });
         if (result.reached) {
@@ -283,25 +305,27 @@ io.on('connection', (socket) => {
         });
         if (!cat || cat.rounds.length === 0)
             return;
-        const firstRound = cat.rounds[0];
-        const firstGroup = firstRound.groups.sort((a, b) => a.name.localeCompare(b.name))[0];
+        const pendingRound = cat.rounds.find(r => r.status !== 'completed');
+        if (!pendingRound)
+            return;
+        const firstGroup = pendingRound.groups.sort((a, b) => a.name.localeCompare(b.name))[0];
         if (!firstGroup)
             return;
         await db_1.default.tournament.update({ where: { id: data.tournamentId }, data: { status: 'active' } });
-        await db_1.default.round.update({ where: { id: firstRound.id }, data: { status: 'active' } });
+        await db_1.default.round.update({ where: { id: pendingRound.id }, data: { status: 'active' } });
         await db_1.default.group.update({ where: { id: firstGroup.id }, data: { status: 'active', currentPasada: 1 } });
         await (0, consensus_manager_1.resetAllConsensus)();
         await updateState({
             status: 'pasada_activa',
             activeTournamentId: data.tournamentId,
             activeCategoryId: data.categoryId,
-            activeRoundId: firstRound.id,
+            activeRoundId: pendingRound.id,
             activeGroupId: firstGroup.id,
             activePasadaNumber: 1,
             activeParticipantId: null
         });
         await broadcastState();
-        console.log(`Torneo iniciado: Cat ${cat.name}, Ronda ${firstRound.number}, ${firstGroup.name}`);
+        console.log(`Torneo iniciado: Cat ${cat.name}, Ronda ${pendingRound.number}, ${firstGroup.name}`);
     });
     // ── ADMIN: Set active participant ──
     socket.on('admin_set_participant', async (data) => {
@@ -365,6 +389,16 @@ io.on('connection', (socket) => {
         await broadcastState();
         console.log('Admin forzó siguiente grupo');
     });
+    // ── ADMIN: Emit Configured Params for Live Screen ──
+    socket.on('admin_category_configured', (data) => {
+        io.emit('live_category_configured', data);
+        console.log('Category configured for live screen:', data.categoryName);
+    });
+    // ── ADMIN: Send formed groups to Live Screen ──
+    socket.on('admin_raffle_done', (data) => {
+        io.emit('live_raffle_done', data);
+        console.log(`Raffle done for ${data.type}: ${data.groups.length} groups`);
+    });
     // ── ADMIN: Generate next round ──
     socket.on('admin_generate_next_round', async (data) => {
         const state = await getState();
@@ -375,20 +409,9 @@ io.on('connection', (socket) => {
             where: { roundId: newRound.id },
             orderBy: { name: 'asc' }
         });
-        if (firstGroup) {
-            await db_1.default.round.update({ where: { id: newRound.id }, data: { status: 'active' } });
-            await db_1.default.group.update({ where: { id: firstGroup.id }, data: { status: 'active', currentPasada: 1 } });
-            await (0, consensus_manager_1.resetAllConsensus)();
-            await updateState({
-                status: 'pasada_activa',
-                activeRoundId: newRound.id,
-                activeGroupId: firstGroup.id,
-                activePasadaNumber: 1,
-                activeParticipantId: null
-            });
-        }
+        // DO NOT update status to active yet. Wait for admin_start_tournament.
         await broadcastState();
-        console.log('Nueva ronda generada');
+        console.log('Nueva ronda generada (Finales creadas pero no iniciadas)');
     });
     // ── ADMIN: Edit score (post-pasada) ──
     socket.on('admin_edit_score', async (data) => {
