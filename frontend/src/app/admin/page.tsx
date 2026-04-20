@@ -179,6 +179,23 @@ export default function AdminView() {
     fetchStructure();
   };
 
+  const resetCategory = async (catId: string) => {
+    if (!confirm("⚠️ ¿Borrar TODOS los datos de esta categoría? Se eliminarán grupos, jueces, participantes y puntajes. Esta acción es irreversible.")) return;
+    try {
+      const res = await fetch(`${apiUrl}/admin/category/${catId}/reset`, { method: 'POST' });
+      if (res.ok) {
+        socket?.emit("admin_reset"); // Emits global state update if active
+        setStructure(null);
+        setSelectedCatId(null);
+        fetchStructure();
+      } else {
+        alert("Error al reiniciar la categoría");
+      }
+    } catch {
+      alert("Error de conexión");
+    }
+  };
+
   const generateNextRound = (qualifiedIds: string[]) => {
     socket?.emit("admin_generate_next_round", { qualifiedIds });
   };
@@ -301,6 +318,10 @@ export default function AdminView() {
                       ● EN VIVO
                     </div>
                   )}
+                  <button onClick={() => resetCategory(activeCat.id)}
+                    className="bg-red-500/10 text-red-500 border border-red-500/30 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white transition-colors">
+                    🔄 Reiniciar Categoría
+                  </button>
                 </div>
               </div>
 
@@ -400,9 +421,13 @@ export default function AdminView() {
                     🎲 Realizar Sorteo
                   </button>
                   <button onClick={() => startTournament(activeCat.id)}
-                    disabled={!canStart}
+                    disabled={!canStart || activeCat.rounds?.[0]?.status === 'completed'}
                     className="bg-green-600 text-white font-bold p-3 rounded-xl hover:bg-green-500 flex-[2] uppercase tracking-wider text-sm disabled:opacity-30 disabled:cursor-not-allowed">
-                    ▶ Inicio Clasificaciones
+                    {isThisCatLive && state?.activeRoundId === activeCat.rounds?.[0]?.id 
+                      ? "▶ Clasificaciones Iniciadas" 
+                      : activeCat.rounds?.[0]?.status === 'completed' 
+                        ? "Clasificaciones Finalizadas" 
+                        : "▶ Inicio Clasificaciones"}
                   </button>
                 </div>
               </section>
@@ -577,8 +602,9 @@ export default function AdminView() {
                             </div>
                           </div>
                           <button onClick={() => generateNextRound(classification.qualified.map((q: any) => q.participantId))}
-                            className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-500 uppercase text-sm">
-                            🏆 Inicio de Finales →
+                            disabled={activeCat.rounds?.length >= 2 && state?.activeRoundId === activeCat.rounds?.[1]?.id}
+                            className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-500 uppercase text-sm disabled:opacity-50">
+                            {activeCat.rounds?.length >= 2 && state?.activeRoundId === activeCat.rounds?.[1]?.id ? "🏆 Finales Iniciadas" : "🏆 Inicio de Finales →"}
                           </button>
                         </>
                       )}

@@ -319,3 +319,53 @@ export const resetTournament = async (_req: Request, res: Response) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
+export const resetCategory = async (req: Request, res: Response) => {
+  try {
+    const categoryId = req.params.categoryId;
+    const cat = await prisma.category.findUnique({ where: { id: categoryId } });
+    if (!cat) return res.status(404).json({ error: "No encontrada" });
+
+    const participants = await prisma.participant.findMany({ where: { categoryId } });
+    const participantIds = participants.map(p => p.id);
+
+    const rounds = await prisma.round.findMany({ where: { categoryId } });
+    const roundIds = rounds.map(r => r.id);
+
+    const groups = await prisma.group.findMany({ where: { roundId: { in: roundIds } } });
+    const groupIds = groups.map(g => g.id);
+
+    await prisma.score.deleteMany({ where: { participantId: { in: participantIds } } });
+    await prisma.groupParticipant.deleteMany({ where: { groupId: { in: groupIds } } });
+    await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
+    await prisma.round.deleteMany({ where: { id: { in: roundIds } } });
+    await prisma.participant.deleteMany({ where: { categoryId } });
+    await prisma.judge.deleteMany({ where: { categoryId } });
+    
+    const state = await prisma.systemState.findUnique({ where: { id: 'global' } });
+    if (state && state.activeCategoryId === categoryId) {
+      await prisma.systemState.update({
+        where: { id: 'global' },
+        data: {
+          status: 'setup',
+          activeTournamentId: null,
+          activeCategoryId: null,
+          activeRoundId: null,
+          activeGroupId: null,
+          activeParticipantId: null,
+          activePasadaNumber: 1,
+          consensusEndPasada: '[]',
+          consensusNextPasada: '[]',
+          consensusNextGroup: '[]'
+        }
+      });
+    }
+
+    await prisma.category.delete({ where: { id: categoryId } });
+
+    res.status(200).json({ message: "Category reset complete" });
+  } catch (error) {
+    console.error("Error resetCategory:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
