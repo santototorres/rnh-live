@@ -196,34 +196,32 @@ export const updateCategory = async (req: Request, res: Response) => {
     });
 
     if (groupSize !== undefined) {
-      const tournament = await prisma.tournament.findUnique({ where: { id: updated.tournamentId } });
-      if (tournament?.status === 'setup') {
-        const round1 = await prisma.round.findFirst({ 
-          where: { categoryId: updated.id, number: 1 }, 
-          include: { groups: { include: { participants: true } } } 
-        }) as any;
-        if (round1) {
-          const participantIds = round1.groups.flatMap((g: any) => g.participants.map((p: any) => p.participantId));
-          
-          await prisma.groupParticipant.deleteMany({ where: { group: { roundId: round1.id } } });
-          await prisma.group.deleteMany({ where: { roundId: round1.id } });
-          
-          const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
-          const chunks: string[][] = [];
-          for (let i = 0; i < shuffled.length; i += updated.groupSize) {
-            chunks.push(shuffled.slice(i, i + updated.groupSize));
-          }
-          
-          for (let i = 0; i < chunks.length; i++) {
-            const group = await prisma.group.create({
-              data: { name: `Grupo ${i + 1}`, roundId: round1.id }
-            });
-            await Promise.all(chunks[i].map((pid: string, index: number) =>
-              prisma.groupParticipant.create({
-                data: { groupId: group.id, participantId: pid, order: index + 1 }
-              })
-            ));
-          }
+      const activeRound = await prisma.round.findFirst({ 
+        where: { categoryId: updated.id, status: { not: 'completed' } }, 
+        orderBy: { number: 'desc' },
+        include: { groups: { include: { participants: true } } } 
+      }) as any;
+      if (activeRound) {
+        const participantIds = activeRound.groups.flatMap((g: any) => g.participants.map((p: any) => p.participantId));
+        
+        await prisma.groupParticipant.deleteMany({ where: { group: { roundId: activeRound.id } } });
+        await prisma.group.deleteMany({ where: { roundId: activeRound.id } });
+        
+        const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
+        const chunks: string[][] = [];
+        for (let i = 0; i < shuffled.length; i += updated.groupSize) {
+          chunks.push(shuffled.slice(i, i + updated.groupSize));
+        }
+        
+        for (let i = 0; i < chunks.length; i++) {
+          const group = await prisma.group.create({
+            data: { name: `Grupo ${i + 1}`, roundId: activeRound.id }
+          });
+          await Promise.all(chunks[i].map((pid: string, index: number) =>
+            prisma.groupParticipant.create({
+              data: { groupId: group.id, participantId: pid, order: index + 1 }
+            })
+          ));
         }
       }
     }

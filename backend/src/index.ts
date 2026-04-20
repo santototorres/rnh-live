@@ -345,12 +345,14 @@ io.on('connection', (socket) => {
     });
     if (!cat || cat.rounds.length === 0) return;
 
-    const firstRound = cat.rounds[0];
-    const firstGroup = firstRound.groups.sort((a, b) => a.name.localeCompare(b.name))[0];
+    const pendingRound = cat.rounds.find(r => r.status !== 'completed');
+    if (!pendingRound) return;
+
+    const firstGroup = pendingRound.groups.sort((a, b) => a.name.localeCompare(b.name))[0];
     if (!firstGroup) return;
 
     await prisma.tournament.update({ where: { id: data.tournamentId }, data: { status: 'active' } });
-    await prisma.round.update({ where: { id: firstRound.id }, data: { status: 'active' } });
+    await prisma.round.update({ where: { id: pendingRound.id }, data: { status: 'active' } });
     await prisma.group.update({ where: { id: firstGroup.id }, data: { status: 'active', currentPasada: 1 } });
 
     await resetAllConsensus();
@@ -359,14 +361,14 @@ io.on('connection', (socket) => {
       status: 'pasada_activa',
       activeTournamentId: data.tournamentId,
       activeCategoryId: data.categoryId,
-      activeRoundId: firstRound.id,
+      activeRoundId: pendingRound.id,
       activeGroupId: firstGroup.id,
       activePasadaNumber: 1,
       activeParticipantId: null
     });
 
     await broadcastState();
-    console.log(`Torneo iniciado: Cat ${cat.name}, Ronda ${firstRound.number}, ${firstGroup.name}`);
+    console.log(`Torneo iniciado: Cat ${cat.name}, Ronda ${pendingRound.number}, ${firstGroup.name}`);
   });
 
   // ── ADMIN: Set active participant ──
@@ -455,23 +457,11 @@ io.on('connection', (socket) => {
       where: { roundId: newRound.id },
       orderBy: { name: 'asc' }
     });
-
-    if (firstGroup) {
-      await prisma.round.update({ where: { id: newRound.id }, data: { status: 'active' } });
-      await prisma.group.update({ where: { id: firstGroup.id }, data: { status: 'active', currentPasada: 1 } });
-
-      await resetAllConsensus();
-      await updateState({
-        status: 'pasada_activa',
-        activeRoundId: newRound.id,
-        activeGroupId: firstGroup.id,
-        activePasadaNumber: 1,
-        activeParticipantId: null
-      });
+      // DO NOT update status to active yet. Wait for admin_start_tournament.
     }
 
     await broadcastState();
-    console.log('Nueva ronda generada');
+    console.log('Nueva ronda generada (Finales creadas pero no iniciadas)');
   });
 
   // ── ADMIN: Edit score (post-pasada) ──

@@ -433,11 +433,13 @@ export default function AdminView() {
               </section>
 
               {/* ── GRUPOS PREVIEW ── */}
-              {activeCat.rounds?.[0]?.groups?.length > 0 && (
+              {activeCat.rounds?.length > 0 && activeCat.rounds[activeCat.rounds.length - 1].groups?.length > 0 && (
                 <section className="bg-background border border-border rounded-xl p-5">
-                  <h3 className="text-sm font-bold text-gray-400 uppercase mb-3">📋 Grupos</h3>
+                  <h3 className="text-sm font-bold text-gray-400 uppercase mb-3">
+                    📋 Grupos {activeCat.rounds.length === 1 ? "(Clasificaciones)" : "(Finales)"}
+                  </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {activeCat.rounds[0].groups.map((g: any) => (
+                    {activeCat.rounds[activeCat.rounds.length - 1].groups.map((g: any) => (
                       <div key={g.id} className="bg-surface rounded-lg p-3">
                         <span className="text-primary text-xs font-bold uppercase block mb-2">{g.name}</span>
                         <div className="flex flex-wrap gap-1">
@@ -601,11 +603,52 @@ export default function AdminView() {
                               ))}
                             </div>
                           </div>
-                          <button onClick={() => generateNextRound(classification.qualified.map((q: any) => q.participantId))}
-                            disabled={activeCat.rounds?.length >= 2 && state?.activeRoundId === activeCat.rounds?.[1]?.id}
-                            className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-500 uppercase text-sm disabled:opacity-50">
-                            {activeCat.rounds?.length >= 2 && state?.activeRoundId === activeCat.rounds?.[1]?.id ? "🏆 Finales Iniciadas" : "🏆 Inicio de Finales →"}
-                          </button>
+                          {/* ── PREPARACIÓN DE FINALES ── */}
+                          <div className="mt-8 pt-6 border-t border-border">
+                            <h3 className="text-sm font-bold text-yellow-500 uppercase mb-4 text-center tracking-widest">🏆 Preparación de Finales</h3>
+                            
+                            <div className="bg-surface border border-border rounded-xl p-4 mb-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-bold text-gray-400 uppercase">Ajustar Parámetros Final</span>
+                                <button onClick={() => saveParams(activeCat.id)}
+                                  className="bg-blue-600 text-white font-bold px-3 py-1.5 rounded text-[10px] uppercase transition-colors hover:bg-blue-500">
+                                  Guardar
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <div className="text-center">
+                                  <label className="text-[9px] text-gray-500 uppercase font-bold">N° Pasadas</label>
+                                  <input type="number" min={1} value={editParams.pasadasCount ?? 0} onChange={e => setEditParams(prev => ({ ...prev, pasadasCount: parseInt(e.target.value) || 0 }))} className="w-full bg-background mt-1 text-white text-sm text-center p-1.5 rounded border border-border focus:border-primary focus:outline-none" />
+                                </div>
+                                <div className="text-center">
+                                  <label className="text-[9px] text-gray-500 uppercase font-bold">Tam. Grupo</label>
+                                  <input type="number" min={1} value={editParams.groupSize ?? 0} onChange={e => setEditParams(prev => ({ ...prev, groupSize: parseInt(e.target.value) || 0 }))} className="w-full bg-background mt-1 text-white text-sm text-center p-1.5 rounded border border-border focus:border-primary focus:outline-none" />
+                                </div>
+                                <div className="text-center">
+                                  <label className="text-[9px] text-gray-500 uppercase font-bold">% Clasifican</label>
+                                  <input type="number" min={0} value={editParams.qualifyPercent ?? 0} onChange={e => setEditParams(prev => ({ ...prev, qualifyPercent: parseInt(e.target.value) || 0 }))} className="w-full bg-background mt-1 text-white text-sm text-center p-1.5 rounded border border-border focus:border-primary focus:outline-none" />
+                                </div>
+                                <div className="text-center">
+                                  <label className="text-[9px] text-gray-500 uppercase font-bold">N° Jueces</label>
+                                  <input type="number" min={1} value={editParams.judgesCount ?? 0} onChange={e => setEditParams(prev => ({ ...prev, judgesCount: parseInt(e.target.value) || 0 }))} className="w-full bg-background mt-1 text-white text-sm text-center p-1.5 rounded border border-border focus:border-primary focus:outline-none" />
+                                </div>
+                              </div>
+                            </div>
+
+                            <button onClick={() => generateNextRound(classification.qualified.map((q: any) => q.participantId))}
+                              disabled={activeCat.rounds?.length >= 2}
+                              className="w-full bg-blue-600 border-2 border-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-500 uppercase text-sm disabled:opacity-30 disabled:cursor-not-allowed mb-3">
+                              {activeCat.rounds?.length >= 2 ? "✅ Grupos de Final Generados (Arriba)" : "🎲 Añadir y Sortear Finales"}
+                            </button>
+
+                            {activeCat.rounds?.length >= 2 && (
+                              <button onClick={() => startTournament(activeCat.id)}
+                                disabled={state?.activeRoundId === activeCat.rounds[1].id}
+                                className="w-full bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-500 uppercase text-sm disabled:opacity-50 tracking-wider shadow-lg shadow-green-600/20">
+                                {state?.activeRoundId === activeCat.rounds[1].id ? "🏆 Finales Iniciadas" : "▶ Iniciar Finales Oficialmente"}
+                              </button>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
