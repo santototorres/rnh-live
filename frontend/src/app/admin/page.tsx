@@ -78,7 +78,7 @@ export default function AdminView() {
     setIsSyncing(true);
     try {
       // 1. Fetch CSV mapping through NextJS local proxy
-      const proxyRes = await fetch('/rnh/api/sheet', {
+      const proxyRes = await fetch('/rnh/sheetApi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sheetUrl })
