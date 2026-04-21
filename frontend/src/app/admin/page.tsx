@@ -63,11 +63,27 @@ export default function AdminView() {
     socket.on("round_classification", (d) => setClassification(d));
     socket.on("force_structure_refresh", () => fetchStructure());
 
+    // Listen for individual score submissions to update judge badges in real-time
+    socket.on("score_submitted", (data: { judgeId: string; participantId: string; score: number; pasadaNumber: number }) => {
+      setState((prev: any) => {
+        if (!prev) return prev;
+        const newScores = [...(prev.scoresThisPasada || [])];
+        const idx = newScores.findIndex((s: any) => s.judgeId === data.judgeId && s.participantId === data.participantId);
+        if (idx >= 0) {
+          newScores[idx] = { ...newScores[idx], value: data.score };
+        } else {
+          newScores.push({ judgeId: data.judgeId, participantId: data.participantId, value: data.score });
+        }
+        return { ...prev, scoresThisPasada: newScores };
+      });
+    });
+
     return () => {
       socket.off("state_update");
       socket.off("pasada_results");
       socket.off("round_classification");
       socket.off("force_structure_refresh");
+      socket.off("score_submitted");
     };
   }, [socket]);
 

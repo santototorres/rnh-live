@@ -1,13 +1,14 @@
 "use client";
 
 import { useSocket } from "@/components/SocketProvider";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function JudgeView() {
   const { socket, connected } = useSocket();
   const [state, setState] = useState<any>(null);
   const [scores, setScores] = useState<Record<string, number | null>>({});
+  const stateRef = useRef<any>(null);
   
   // Auth
   const [judge, setJudge] = useState<any>(null);
@@ -38,13 +39,16 @@ export default function JudgeView() {
     socket.emit("request_state");
 
     socket.on("state_update", (newState) => {
-      const prevStatus = state?.status;
-      const prevPasada = state?.activePasadaNumber;
-      const prevGroup = state?.activeGroupId;
+      // Use ref to get REAL previous state (avoids stale closure)
+      const prev = stateRef.current;
+      const prevStatus = prev?.status;
+      const prevPasada = prev?.activePasadaNumber;
+      const prevGroup = prev?.activeGroupId;
 
       setState(newState);
+      stateRef.current = newState;
 
-      // Reset scores when pasada or group changes
+      // Reset scores ONLY when pasada number or group actually changes
       if (
         newState.status === "pasada_activa" && 
         (prevStatus !== "pasada_activa" || prevPasada !== newState.activePasadaNumber || prevGroup !== newState.activeGroupId)
