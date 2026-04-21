@@ -126,7 +126,8 @@ export default function AdminView() {
         pasadasCount: editParams.pasadasCount,
         groupSize: editParams.groupSize,
         qualifyCount: editParams.qualifyCount,
-        judgesCount: structure?.judges?.length || 0
+        judgesCount: structure?.judges?.length || 0,
+        phase: activeTab === 'finales' ? 'Finales' : 'Clasificaciones'
       });
       alert("✅ Parámetros guardados");
       fetchStructure();
@@ -498,18 +499,43 @@ export default function AdminView() {
 
                       {state?.status === "pasada_activa" && state?.groupParticipants?.length > 0 && (
                         <div>
-                          <h4 className="text-[10px] text-gray-500 font-bold uppercase mb-2">Participantes en el Spot</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                            {state.groupParticipants.map((p: any) => (
-                              <button key={p.id} onClick={() => setActiveParticipant(p.id)}
-                                className={`p-2.5 rounded-lg text-xs font-bold transition-all ${
-                                  state.activeParticipantId === p.id
-                                    ? 'bg-primary text-white shadow-lg shadow-primary/30 scale-[1.02]'
-                                    : 'bg-surface text-gray-400 hover:bg-gray-800 border border-border'
+                          <h4 className="text-[10px] text-gray-500 font-bold uppercase mb-2">Participantes en el Spot — Pasada {state.activePasadaNumber}</h4>
+                          <div className="space-y-2">
+                            {state.groupParticipants.map((p: any) => {
+                              const isSelected = state.activeParticipantId === p.id;
+                              return (
+                                <div key={p.id} className={`rounded-lg p-3 transition-all ${
+                                  isSelected ? 'bg-primary/20 border-2 border-primary' : 'bg-surface border border-border'
                                 }`}>
-                                {p.name}
-                              </button>
-                            ))}
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <button onClick={() => setActiveParticipant(p.id)}
+                                      className={`text-sm font-bold ${isSelected ? 'text-primary' : 'text-white hover:text-primary'}`}>
+                                      {isSelected && "▶ "}{p.name}
+                                    </button>
+                                  </div>
+                                  {/* Judge voting status */}
+                                  <div className="flex flex-wrap gap-1">
+                                    {(state.judges || []).map((j: any) => {
+                                      const hasVoted = (state.scoresThisPasada || []).some(
+                                        (s: any) => s.participantId === p.id && s.judgeId === j.id
+                                      );
+                                      const score = (state.scoresThisPasada || []).find(
+                                        (s: any) => s.participantId === p.id && s.judgeId === j.id
+                                      );
+                                      return (
+                                        <span key={j.id} className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                          hasVoted 
+                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                            : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                        }`}>
+                                          {j.name} {hasVoted ? `✓${score?.value || ''}` : '✗'}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -696,18 +722,42 @@ export default function AdminView() {
 
                       {state?.status === "pasada_activa" && state?.groupParticipants?.length > 0 && (
                         <div>
-                          <h4 className="text-[10px] text-gray-500 font-bold uppercase mb-2">Participantes en el Spot</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                            {state.groupParticipants.map((p: any) => (
-                              <button key={p.id} onClick={() => setActiveParticipant(p.id)}
-                                className={`p-2.5 rounded-lg text-xs font-bold transition-all ${
-                                  state.activeParticipantId === p.id
-                                    ? 'bg-yellow-500 text-black shadow-lg scale-[1.02]'
-                                    : 'bg-surface text-gray-400 hover:bg-gray-800 border border-border'
+                          <h4 className="text-[10px] text-gray-500 font-bold uppercase mb-2">Participantes en el Spot — Pasada {state.activePasadaNumber}</h4>
+                          <div className="space-y-2">
+                            {state.groupParticipants.map((p: any) => {
+                              const isSelected = state.activeParticipantId === p.id;
+                              return (
+                                <div key={p.id} className={`rounded-lg p-3 transition-all ${
+                                  isSelected ? 'bg-yellow-500/20 border-2 border-yellow-500' : 'bg-surface border border-border'
                                 }`}>
-                                {p.name}
-                              </button>
-                            ))}
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <button onClick={() => setActiveParticipant(p.id)}
+                                      className={`text-sm font-bold ${isSelected ? 'text-yellow-400' : 'text-white hover:text-yellow-400'}`}>
+                                      {isSelected && "▶ "}{p.name}
+                                    </button>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {(state.judges || []).map((j: any) => {
+                                      const hasVoted = (state.scoresThisPasada || []).some(
+                                        (s: any) => s.participantId === p.id && s.judgeId === j.id
+                                      );
+                                      const score = (state.scoresThisPasada || []).find(
+                                        (s: any) => s.participantId === p.id && s.judgeId === j.id
+                                      );
+                                      return (
+                                        <span key={j.id} className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                          hasVoted
+                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                            : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                        }`}>
+                                          {j.name} {hasVoted ? `✓${score?.value || ''}` : '✗'}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}

@@ -153,7 +153,7 @@ export default function LiveView() {
             className="flex flex-col items-center justify-center h-full z-10 p-8 gap-8">
             <motion.h2 initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}
               className="text-xl md:text-2xl font-bold text-gray-400 uppercase tracking-[0.4em]">
-              Configuración
+              {configuredParams.phase || 'Clasificaciones'}
             </motion.h2>
             <motion.h1 initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.3, type: "spring" }}
               className="text-4xl md:text-6xl font-black uppercase text-white tracking-wider">
@@ -267,25 +267,62 @@ export default function LiveView() {
         {isActive && (
           <motion.div key="active"
             initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 1.1 }}
-            className="flex flex-col items-center justify-center h-full z-10 relative p-8">
+            className="flex items-center justify-center h-full z-10 relative p-4 gap-6">
             <div className="absolute w-[150%] h-40 bg-primary/20 -rotate-3 blur-3xl z-[-1] opacity-50" />
-            <div className="inline-block px-6 py-2 bg-primary/20 border-2 border-primary rounded-full mb-8 shadow-[0_0_30px_rgba(255,45,45,0.6)]">
-              <span className="text-primary font-black uppercase tracking-[0.3em] flex items-center gap-3 text-xl">
-                <span className="w-3 h-3 bg-primary rounded-full animate-ping" />
-                EN EL SPOT
-              </span>
+
+            {/* Left sidebar — current group */}
+            {state?.groupParticipants?.length > 0 && (
+              <div className="hidden md:flex flex-col bg-surface/60 backdrop-blur border border-border rounded-2xl p-4 w-44 shrink-0">
+                <span className="text-primary text-[10px] font-black uppercase tracking-wider mb-2">{state.activeGroupName}</span>
+                <div className="space-y-1">
+                  {state.groupParticipants.map((p: any) => (
+                    <div key={p.id} className={`text-xs py-1 px-2 rounded font-bold ${
+                      state.activeParticipantId === p.id
+                        ? 'bg-primary/20 text-primary border border-primary/50'
+                        : 'text-gray-400'
+                    }`}>
+                      {p.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Center — skater name */}
+            <div className="flex flex-col items-center flex-1 min-w-0">
+              <div className="inline-block px-6 py-2 bg-primary/20 border-2 border-primary rounded-full mb-6 shadow-[0_0_30px_rgba(255,45,45,0.6)]">
+                <span className="text-primary font-black uppercase tracking-[0.3em] flex items-center gap-3 text-xl">
+                  <span className="w-3 h-3 bg-primary rounded-full animate-ping" />
+                  EN EL SPOT
+                </span>
+              </div>
+              <h1 className="text-[4rem] sm:text-[6rem] lg:text-[8rem] xl:text-[10rem] font-black uppercase text-white tracking-tighter italic -skew-x-[12deg] leading-[0.85] mb-6 drop-shadow-[0_10px_15px_rgba(0,0,0,0.8)] max-w-[70vw] truncate px-4">
+                {state?.activeParticipantName || "..."}
+              </h1>
+              <motion.img src="/rnh/hueso.png" alt="Hueso"
+                className="w-32 md:w-52 object-contain absolute bottom-[10%] z-[-1] opacity-50"
+                animate={{ y: [0, -20, 0], rotate: [-6, 6, -6] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} />
+              <div className="flex gap-3 mt-2">
+                <motion.div initial={{ width: 0 }} animate={{ width: "140px" }} className="h-2 bg-white skew-x-[12deg] shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
+                <motion.div initial={{ width: 0 }} animate={{ width: "70px" }} transition={{ delay: 0.2 }} className="h-2 bg-primary skew-x-[12deg] shadow-[0_0_10px_rgba(255,45,45,0.8)]" />
+              </div>
             </div>
-            <h1 className="text-[4rem] sm:text-[6rem] lg:text-[10rem] xl:text-[13rem] font-black uppercase text-white tracking-tighter italic -skew-x-[12deg] leading-[0.85] mb-8 drop-shadow-[0_10px_15px_rgba(0,0,0,0.8)] max-w-[95vw] truncate px-6">
-              {state?.activeParticipantName || "..."}
-            </h1>
-            <motion.img src="/rnh/hueso.png" alt="Hueso"
-              className="w-48 md:w-80 object-contain absolute bottom-[15%] z-[-1] opacity-60"
-              animate={{ y: [0, -30, 0], rotate: [-8, 8, -8] }}
-              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} />
-            <div className="flex gap-3 mt-4">
-              <motion.div initial={{ width: 0 }} animate={{ width: "180px" }} className="h-2 bg-white skew-x-[12deg] shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
-              <motion.div initial={{ width: 0 }} animate={{ width: "90px" }} transition={{ delay: 0.2 }} className="h-2 bg-primary skew-x-[12deg] shadow-[0_0_10px_rgba(255,45,45,0.8)]" />
-            </div>
+
+            {/* Right sidebar — next group */}
+            {state?.nextGroupName && state?.nextGroupParticipants?.length > 0 && (
+              <div className="hidden md:flex flex-col bg-surface/40 backdrop-blur border border-border/50 rounded-2xl p-4 w-44 shrink-0">
+                <span className="text-gray-500 text-[10px] font-black uppercase tracking-wider mb-1">Siguiente Grupo</span>
+                <span className="text-white text-xs font-bold mb-2">{state.nextGroupName}</span>
+                <div className="space-y-1">
+                  {state.nextGroupParticipants.map((p: any) => (
+                    <div key={p.id} className="text-xs text-gray-500 py-0.5 px-2">
+                      {p.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 

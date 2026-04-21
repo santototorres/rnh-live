@@ -240,8 +240,11 @@ const randomizeGroups = async (req, res) => {
             include: { participants: { include: { participant: true }, orderBy: { order: 'asc' } } }
         });
         const groupsData = formedGroups.map(g => ({
+            id: g.id,
             name: g.name,
-            participants: g.participants.map(gp => gp.participant.name)
+            participants: g.participants.map(gp => ({
+                participant: { id: gp.participant.id, name: gp.participant.name }
+            }))
         }));
         res.status(200).json({ message: "Grupos mezclados aleatoriamente.", groups: groupsData });
     }

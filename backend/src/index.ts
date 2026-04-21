@@ -71,6 +71,10 @@ async function buildBroadcastState() {
   let groupParticipants: any[] = [];
   let totalPasadas = 2;
   let judgesRequired = 3;
+  let nextGroupName: string | null = null;
+  let nextGroupParticipants: any[] = [];
+  let scoresThisPasada: any[] = []; // { participantId, judgeId }[]
+  let judges: any[] = [];
 
   if (state.activeParticipantId) {
     const p = await prisma.participant.findUnique({
@@ -89,14 +93,49 @@ async function buildBroadcastState() {
   }
 
   if (state.activeTournamentId) {
-    const tJudges = await prisma.judge.count({ where: { tournamentId: state.activeTournamentId } });
-    judgesRequired = tJudges > 0 ? tJudges : 3;
+    const tJudges = await prisma.judge.findMany({ where: { tournamentId: state.activeTournamentId } });
+    judgesRequired = tJudges.length > 0 ? tJudges.length : 3;
+    judges = tJudges.map(j => ({ id: j.id, name: j.name }));
   }
 
   if (state.activeGroupId) {
     const g = await prisma.group.findUnique({ where: { id: state.activeGroupId } });
     activeGroupName = g?.name || null;
     groupParticipants = await getGroupParticipants(state.activeGroupId);
+
+    // Find next pending group in the same round
+    if (state.activeRoundId) {
+      const nextGroup = await prisma.group.findFirst({
+        where: { roundId: state.activeRoundId, status: 'pending' },
+        orderBy: { name: 'asc' },
+        include: { participants: { include: { participant: true }, orderBy: { order: 'asc' } } }
+      });
+      if (nextGroup) {
+        nextGroupName = nextGroup.name;
+        nextGroupParticipants = nextGroup.participants.map(gp => ({
+          id: gp.participant.id,
+          name: gp.participant.name,
+          order: gp.order
+        }));
+      }
+
+      // Get scores for current pasada in current group
+      const participantIds = groupParticipants.map((gp: any) => gp.participant.id);
+      if (participantIds.length > 0) {
+        const scores = await prisma.score.findMany({
+          where: {
+            roundId: state.activeRoundId,
+            pasadaNumber: state.activePasadaNumber,
+            participantId: { in: participantIds }
+          }
+        });
+        scoresThisPasada = scores.map(s => ({
+          participantId: s.participantId,
+          judgeId: s.judgeId,
+          value: s.value
+        }));
+      }
+    }
   }
 
   if (state.activeRoundId) {
@@ -134,11 +173,15 @@ async function buildBroadcastState() {
     activePasadaNumber: state.activePasadaNumber,
     totalPasadas,
     judgesRequired,
+    judges,
     groupParticipants: groupParticipants.map(gp => ({
       id: gp.participant.id,
       name: gp.participant.name,
       order: gp.order
     })),
+    nextGroupName,
+    nextGroupParticipants,
+    scoresThisPasada,
     consensus: {
       endPasada: JSON.parse(state.consensusEndPasada || '[]'),
       nextPasada: JSON.parse(state.consensusNextPasada || '[]'),
