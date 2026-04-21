@@ -174,17 +174,17 @@ export const uploadParticipants = async (req: Request, res: Response) => {
         });
       }
 
-      const createdParticipants = await Promise.all(
-        catParticipants.map(async (p: any) =>
-          prisma.participant.create({
-            data: {
-              name: p.Nombre || p.name || 'Unknown',
-              alias: p.Alias || p.alias || null,
-              categoryId: category!.id
-            }
-          })
-        )
-      );
+      const createdParticipants = [];
+      for (const p of catParticipants) {
+        const cp = await prisma.participant.create({
+          data: {
+            name: p.Nombre || p.name || 'Unknown',
+            alias: p.Alias || p.alias || null,
+            categoryId: category!.id
+          }
+        });
+        createdParticipants.push(cp);
+      }
 
       totalParticipants += createdParticipants.length;
 
@@ -207,11 +207,12 @@ export const uploadParticipants = async (req: Request, res: Response) => {
         const group = await prisma.group.create({
           data: { name: `Grupo ${i + 1}`, roundId: round1.id }
         });
-        await Promise.all(chunks[i].map((p, index) =>
-          prisma.groupParticipant.create({
-            data: { groupId: group.id, participantId: p.id, order: index + 1 }
-          })
-        ));
+        for (let j = 0; j < chunks[i].length; j++) {
+          const p = chunks[i][j];
+          await prisma.groupParticipant.create({
+            data: { groupId: group.id, participantId: p.id, order: j + 1 }
+          });
+        }
       }
 
       totalGroups += chunks.length;

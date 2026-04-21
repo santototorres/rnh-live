@@ -147,13 +147,17 @@ const uploadParticipants = async (req, res) => {
                     data: { name: catName, tournamentId: tournament.id, groupSize }
                 });
             }
-            const createdParticipants = await Promise.all(catParticipants.map(async (p) => db_1.default.participant.create({
-                data: {
-                    name: p.Nombre || p.name || 'Unknown',
-                    alias: p.Alias || p.alias || null,
-                    categoryId: category.id
-                }
-            })));
+            const createdParticipants = [];
+            for (const p of catParticipants) {
+                const cp = await db_1.default.participant.create({
+                    data: {
+                        name: p.Nombre || p.name || 'Unknown',
+                        alias: p.Alias || p.alias || null,
+                        categoryId: category.id
+                    }
+                });
+                createdParticipants.push(cp);
+            }
             totalParticipants += createdParticipants.length;
             // Generate Round 1
             let round1 = await db_1.default.round.findFirst({
@@ -172,9 +176,12 @@ const uploadParticipants = async (req, res) => {
                 const group = await db_1.default.group.create({
                     data: { name: `Grupo ${i + 1}`, roundId: round1.id }
                 });
-                await Promise.all(chunks[i].map((p, index) => db_1.default.groupParticipant.create({
-                    data: { groupId: group.id, participantId: p.id, order: index + 1 }
-                })));
+                for (let j = 0; j < chunks[i].length; j++) {
+                    const p = chunks[i][j];
+                    await db_1.default.groupParticipant.create({
+                        data: { groupId: group.id, participantId: p.id, order: j + 1 }
+                    });
+                }
             }
             totalGroups += chunks.length;
         }
