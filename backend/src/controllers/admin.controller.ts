@@ -174,17 +174,18 @@ export const uploadParticipants = async (req: Request, res: Response) => {
         });
       }
 
-      const createdParticipants = [];
-      for (const p of catParticipants) {
-        const cp = await prisma.participant.create({
-          data: {
-            name: p.Nombre || p.name || 'Unknown',
-            alias: p.Alias || p.alias || null,
-            categoryId: category!.id
-          }
-        });
-        createdParticipants.push(cp);
-      }
+      // Bulk insert all participants for this category in one transaction
+      await prisma.participant.createMany({
+        data: (catParticipants as any[]).map((p: any) => ({
+          name: (p.Nombre || p.name || 'Unknown') as string,
+          alias: (p.Alias || p.alias || null) as string | null,
+          categoryId: category!.id
+        })),
+        skipDuplicates: true
+      });
+
+      const createdParticipants: { id: string; name: string; alias: string | null; categoryId: string }[] = 
+        await prisma.participant.findMany({ where: { categoryId: category!.id } });
 
       totalParticipants += createdParticipants.length;
 
@@ -196,9 +197,16 @@ export const uploadParticipants = async (req: Request, res: Response) => {
         round1 = await prisma.round.create({ data: { number: 1, categoryId: category.id } });
       }
 
+      // Delete existing group assignments before re-shuffling
+      const existingGroups = await prisma.group.findMany({ where: { roundId: round1.id } });
+      for (const g of existingGroups) {
+        await prisma.groupParticipant.deleteMany({ where: { groupId: g.id } });
+        await prisma.group.delete({ where: { id: g.id } });
+      }
+
       // Shuffle and chunk
       const shuffled = [...createdParticipants].sort(() => Math.random() - 0.5);
-      const chunks = [];
+      const chunks: { id: string; name: string; alias: string | null; categoryId: string }[][] = [];
       for (let i = 0; i < shuffled.length; i += groupSize) {
         chunks.push(shuffled.slice(i, i + groupSize));
       }
@@ -207,12 +215,13 @@ export const uploadParticipants = async (req: Request, res: Response) => {
         const group = await prisma.group.create({
           data: { name: `Grupo ${i + 1}`, roundId: round1.id }
         });
-        for (let j = 0; j < chunks[i].length; j++) {
-          const p = chunks[i][j];
-          await prisma.groupParticipant.create({
-            data: { groupId: group.id, participantId: p.id, order: j + 1 }
-          });
-        }
+        await prisma.groupParticipant.createMany({
+          data: chunks[i].map((p, idx) => ({
+            groupId: group.id,
+            participantId: p.id,
+            order: idx + 1
+          }))
+        });
       }
 
       totalGroups += chunks.length;

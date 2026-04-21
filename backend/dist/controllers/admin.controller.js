@@ -147,17 +147,16 @@ const uploadParticipants = async (req, res) => {
                     data: { name: catName, tournamentId: tournament.id, groupSize }
                 });
             }
-            const createdParticipants = [];
-            for (const p of catParticipants) {
-                const cp = await db_1.default.participant.create({
-                    data: {
-                        name: p.Nombre || p.name || 'Unknown',
-                        alias: p.Alias || p.alias || null,
-                        categoryId: category.id
-                    }
-                });
-                createdParticipants.push(cp);
-            }
+            // Bulk insert all participants for this category in one transaction
+            await db_1.default.participant.createMany({
+                data: catParticipants.map((p) => ({
+                    name: (p.Nombre || p.name || 'Unknown'),
+                    alias: (p.Alias || p.alias || null),
+                    categoryId: category.id
+                })),
+                skipDuplicates: true
+            });
+            const createdParticipants = await db_1.default.participant.findMany({ where: { categoryId: category.id } });
             totalParticipants += createdParticipants.length;
             // Generate Round 1
             let round1 = await db_1.default.round.findFirst({
@@ -165,6 +164,12 @@ const uploadParticipants = async (req, res) => {
             });
             if (!round1) {
                 round1 = await db_1.default.round.create({ data: { number: 1, categoryId: category.id } });
+            }
+            // Delete existing group assignments before re-shuffling
+            const existingGroups = await db_1.default.group.findMany({ where: { roundId: round1.id } });
+            for (const g of existingGroups) {
+                await db_1.default.groupParticipant.deleteMany({ where: { groupId: g.id } });
+                await db_1.default.group.delete({ where: { id: g.id } });
             }
             // Shuffle and chunk
             const shuffled = [...createdParticipants].sort(() => Math.random() - 0.5);
@@ -176,12 +181,13 @@ const uploadParticipants = async (req, res) => {
                 const group = await db_1.default.group.create({
                     data: { name: `Grupo ${i + 1}`, roundId: round1.id }
                 });
-                for (let j = 0; j < chunks[i].length; j++) {
-                    const p = chunks[i][j];
-                    await db_1.default.groupParticipant.create({
-                        data: { groupId: group.id, participantId: p.id, order: j + 1 }
-                    });
-                }
+                await db_1.default.groupParticipant.createMany({
+                    data: chunks[i].map((p, idx) => ({
+                        groupId: group.id,
+                        participantId: p.id,
+                        order: idx + 1
+                    }))
+                });
             }
             totalGroups += chunks.length;
         }
