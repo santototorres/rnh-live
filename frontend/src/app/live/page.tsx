@@ -12,9 +12,8 @@ export default function LiveView() {
   const [classification, setClassification] = useState<any>(null);
   const [showResults, setShowResults] = useState<"pasada" | "group" | "classification" | null>(null);
 
-  // Live scenes
   const [configuredParams, setConfiguredParams] = useState<any>(null);
-  const [raffleGroups, setRaffleGroups] = useState<any>(null); // { type, categoryName, groups }
+  const [raffleGroups, setRaffleGroups] = useState<any>(null);
   const [rafflePhase, setRafflePhase] = useState<"spinning" | "done" | null>(null);
   const [shuffledNames, setShuffledNames] = useState<string[]>([]);
   const [liveScene, setLiveScene] = useState<"idle" | "configured" | "raffle" | "groups">("idle");
@@ -31,15 +30,8 @@ export default function LiveView() {
       }
     });
 
-    socket.on("pasada_results", (d) => {
-      setPasadaResults(d);
-      setShowResults("pasada");
-    });
-
-    socket.on("group_results", (d) => {
-      setGroupResults(d);
-      setShowResults("group");
-    });
+    socket.on("pasada_results", (d) => { setPasadaResults(d); setShowResults("pasada"); });
+    socket.on("group_results", (d) => { setGroupResults(d); setShowResults("group"); });
 
     socket.on("round_classification", (d) => {
       setClassification(d);
@@ -54,7 +46,8 @@ export default function LiveView() {
       setShowResults(null);
     });
 
-    socket.on("live_raffle_start", (d) => {
+    // Backend broadcasts live_raffle_done after admin_raffle_done
+    socket.on("live_raffle_done", (d) => {
       setRaffleGroups(d);
       setLiveScene("raffle");
       setRafflePhase("spinning");
@@ -63,16 +56,6 @@ export default function LiveView() {
 
     socket.on("live_raffle_groups", (d) => {
       setRaffleGroups((prev: any) => ({ ...prev, ...d }));
-      setRafflePhase("done");
-    });
-
-    // When admin emits admin_raffle_done the backend turns it into live_raffle_groups
-    // But we also handle it here directly:
-    socket.on("admin_raffle_done", (d) => {
-      setRaffleGroups(d);
-      setLiveScene("raffle");
-      setRafflePhase("spinning");
-      setShowResults(null);
     });
 
     return () => {
@@ -81,16 +64,14 @@ export default function LiveView() {
       socket.off("group_results");
       socket.off("round_classification");
       socket.off("live_category_configured");
-      socket.off("live_raffle_start");
+      socket.off("live_raffle_done");
       socket.off("live_raffle_groups");
-      socket.off("admin_raffle_done");
     };
   }, [socket]);
 
   // Raffle spinning animation
   useEffect(() => {
     if (rafflePhase !== "spinning" || !raffleGroups) return;
-    // Collect all participant names from groups
     const allNames: string[] = [];
     if (raffleGroups.groups) {
       raffleGroups.groups.forEach((g: any) => {
@@ -99,10 +80,7 @@ export default function LiveView() {
         });
       });
     }
-    if (allNames.length === 0) {
-      setTimeout(() => setRafflePhase("done"), 1500);
-      return;
-    }
+    if (allNames.length === 0) { setTimeout(() => { setRafflePhase("done"); setLiveScene("groups"); }, 1500); return; }
 
     let idx = 0;
     const interval = setInterval(() => {
@@ -111,10 +89,7 @@ export default function LiveView() {
       idx++;
       if (idx > 35) {
         clearInterval(interval);
-        setTimeout(() => {
-          setRafflePhase("done");
-          setLiveScene("groups");
-        }, 500);
+        setTimeout(() => { setRafflePhase("done"); setLiveScene("groups"); }, 500);
       }
     }, 110);
     return () => clearInterval(interval);
@@ -124,7 +99,6 @@ export default function LiveView() {
 
   return (
     <div className="flex-1 flex flex-col bg-background min-h-screen overflow-hidden text-center justify-center relative">
-      {/* Background */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/10 via-[#0B0B0B] to-[#0B0B0B] z-0" />
       <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-background via-primary to-background opacity-50 z-0" />
 
@@ -177,20 +151,15 @@ export default function LiveView() {
           <motion.div key="configured"
             initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }}
             className="flex flex-col items-center justify-center h-full z-10 p-8 gap-8">
-
-            <motion.h2
-              initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}
+            <motion.h2 initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}
               className="text-xl md:text-2xl font-bold text-gray-400 uppercase tracking-[0.4em]">
               Configuración
             </motion.h2>
-
-            <motion.h1
-              initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.3, type: "spring" }}
+            <motion.h1 initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.3, type: "spring" }}
               className="text-4xl md:text-6xl font-black uppercase text-white tracking-wider">
               {configuredParams.categoryName}
             </motion.h1>
-
-            <div className="grid grid-cols-3 md:grid-cols-3 gap-6 mt-4">
+            <div className="grid grid-cols-3 gap-6 mt-4">
               {[
                 { label: "PASADAS", value: configuredParams.pasadasCount, icon: "🔄", color: "text-blue-400" },
                 { label: "POR GRUPO", value: configuredParams.groupSize, icon: "👥", color: "text-purple-400" },
@@ -205,10 +174,7 @@ export default function LiveView() {
                 </motion.div>
               ))}
             </div>
-
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}
-              className="flex gap-2 mt-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }} className="flex gap-2 mt-6">
               <div className="h-1.5 w-20 bg-primary/50 skew-x-[12deg]" />
               <div className="h-1.5 w-10 bg-white/30 skew-x-[12deg]" />
             </motion.div>
@@ -221,8 +187,7 @@ export default function LiveView() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="flex flex-col items-center justify-center h-full z-10 p-8">
             <motion.div className="flex flex-col items-center gap-6">
-              <motion.h2
-                animate={{ opacity: [1, 0.5, 1] }} transition={{ repeat: Infinity, duration: 0.8 }}
+              <motion.h2 animate={{ opacity: [1, 0.5, 1] }} transition={{ repeat: Infinity, duration: 0.8 }}
                 className="text-2xl md:text-4xl font-black uppercase text-primary tracking-[0.3em]">
                 🎲 Sorteando...
               </motion.h2>
@@ -232,38 +197,47 @@ export default function LiveView() {
                   <motion.div key={`${name}-${i}`}
                     initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
                     animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                    exit={{ opacity: 0, scale: 0.5 }}
                     transition={{ duration: 0.08 }}
-                    className="bg-surface/80 backdrop-blur border border-primary/30 rounded-xl px-4 py-3 text-white font-bold text-sm md:text-base shadow-[0_0_20px_rgba(255,45,45,0.15)]">
+                    className="bg-surface/80 backdrop-blur border border-primary/30 rounded-xl px-4 py-3 text-white font-bold text-sm md:text-base">
                     {name}
                   </motion.div>
                 ))}
               </div>
-              <motion.div
-                animate={{ scaleX: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }}
-                transition={{ repeat: Infinity, duration: 0.5 }}
-                className="h-1.5 w-40 bg-primary rounded-full mt-4"
-              />
+              <motion.div animate={{ scaleX: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 0.5 }}
+                className="h-1.5 w-40 bg-primary rounded-full mt-4" />
             </motion.div>
           </motion.div>
         )}
 
-        {/* ── GROUPS REVEAL ── */}
+        {/* ── GROUPS REVEAL — with params bar ── */}
         {!isActive && !showResults && liveScene === "groups" && raffleGroups && (
           <motion.div key="groups"
             initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
             className="flex flex-col items-center z-10 p-6 w-full max-w-5xl mx-auto">
 
-            <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="mb-6 text-center">
+            <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="mb-4 text-center">
               <p className="text-xs text-gray-500 uppercase tracking-[0.4em] mb-1">
                 {raffleGroups.type === 'clasificaciones' ? 'Grupos de Clasificación' : 'Grupos de Finales'}
               </p>
               <h2 className="text-3xl md:text-5xl font-black uppercase text-white">{raffleGroups.categoryName}</h2>
-              <div className="flex gap-2 mt-3 justify-center">
-                <div className="h-1 w-16 bg-primary/50 skew-x-[12deg]" />
-                <div className="h-1 w-8 bg-white/20 skew-x-[12deg]" />
-              </div>
             </motion.div>
+
+            {/* Params bar — always visible alongside groups */}
+            {configuredParams && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+                className="flex gap-4 mb-5">
+                {[
+                  { label: "PASADAS", value: configuredParams.pasadasCount, color: "text-blue-400" },
+                  { label: "POR GRUPO", value: configuredParams.groupSize, color: "text-purple-400" },
+                  { label: "CLASIFICAN", value: configuredParams.qualifyCount, color: "text-green-400" },
+                ].map((item) => (
+                  <div key={item.label} className="bg-surface/60 border border-border rounded-xl px-4 py-2 text-center">
+                    <span className={`text-2xl font-black block ${item.color}`}>{item.value}</span>
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider">{item.label}</span>
+                  </div>
+                ))}
+              </motion.div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
               {raffleGroups.groups?.map((g: any, gi: number) => (
@@ -295,26 +269,19 @@ export default function LiveView() {
             initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 1.1 }}
             className="flex flex-col items-center justify-center h-full z-10 relative p-8">
             <div className="absolute w-[150%] h-40 bg-primary/20 -rotate-3 blur-3xl z-[-1] opacity-50" />
-
             <div className="inline-block px-6 py-2 bg-primary/20 border-2 border-primary rounded-full mb-8 shadow-[0_0_30px_rgba(255,45,45,0.6)]">
               <span className="text-primary font-black uppercase tracking-[0.3em] flex items-center gap-3 text-xl">
                 <span className="w-3 h-3 bg-primary rounded-full animate-ping" />
                 EN EL SPOT
               </span>
             </div>
-
             <h1 className="text-[4rem] sm:text-[6rem] lg:text-[10rem] xl:text-[13rem] font-black uppercase text-white tracking-tighter italic -skew-x-[12deg] leading-[0.85] mb-8 drop-shadow-[0_10px_15px_rgba(0,0,0,0.8)] max-w-[95vw] truncate px-6">
               {state?.activeParticipantName || "..."}
             </h1>
-
-            <motion.img
-              src="/rnh/hueso.png"
-              alt="Hueso"
+            <motion.img src="/rnh/hueso.png" alt="Hueso"
               className="w-48 md:w-80 object-contain absolute bottom-[15%] z-[-1] opacity-60"
               animate={{ y: [0, -30, 0], rotate: [-8, 8, -8] }}
-              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-            />
-
+              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} />
             <div className="flex gap-3 mt-4">
               <motion.div initial={{ width: 0 }} animate={{ width: "180px" }} className="h-2 bg-white skew-x-[12deg] shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
               <motion.div initial={{ width: 0 }} animate={{ width: "90px" }} transition={{ delay: 0.2 }} className="h-2 bg-primary skew-x-[12deg] shadow-[0_0_10px_rgba(255,45,45,0.8)]" />
@@ -371,7 +338,7 @@ export default function LiveView() {
           </motion.div>
         )}
 
-        {/* ── CLASSIFICATION (Round 1 — Clasificados/Eliminados) ── */}
+        {/* ── CLASSIFICATION ROUND 1 — Solo Clasificados ── */}
         {showResults === "classification" && classification && classification.roundNumber === 1 && (
           <motion.div key="classification"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -380,75 +347,57 @@ export default function LiveView() {
               🎯 Clasificación — {classification.categoryName}
             </h2>
             <p className="text-gray-500 text-sm mb-6">Top {classification.qualifyCount} clasifican a Finales</p>
-            <div className="w-full max-w-2xl grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-[10px] text-green-400 font-bold uppercase mb-2">✅ Clasificados</p>
-                {classification.qualified?.map((r: any, i: number) => (
-                  <motion.div key={r.participantId}
-                    initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
-                    className="flex justify-between items-center py-2.5 px-4 mb-1.5 rounded-lg bg-green-500/10 border border-green-500/30">
-                    <span className="text-green-300 font-bold">✅ #{r.globalPosition} {r.name}</span>
-                    <span className="text-white font-bold">{r.totalScore}</span>
-                  </motion.div>
-                ))}
-              </div>
-              <div>
-                <p className="text-[10px] text-red-400 font-bold uppercase mb-2">❌ Eliminados</p>
-                {classification.eliminated?.map((r: any, i: number) => (
-                  <motion.div key={r.participantId}
-                    initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} transition={{ delay: 0.5 + i * 0.06 }}
-                    className="flex justify-between items-center py-2.5 px-4 mb-1.5 rounded-lg bg-red-500/5 border border-red-500/20">
-                    <span className="text-red-400/60">#{r.globalPosition} {r.name}</span>
-                    <span className="text-gray-600">{r.totalScore}</span>
-                  </motion.div>
-                ))}
-              </div>
+            <div className="w-full max-w-lg">
+              {classification.qualified?.map((r: any, i: number) => (
+                <motion.div key={r.participantId}
+                  initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+                  className="flex justify-between items-center py-3 px-5 mb-2 rounded-xl bg-green-500/10 border border-green-500/30">
+                  <span className="flex items-center gap-3">
+                    <span className="text-green-400 font-black text-lg">#{r.globalPosition}</span>
+                    <span className="text-white font-bold text-lg">{r.name}</span>
+                  </span>
+                  <span className="text-white font-bold">{r.totalScore} pts</span>
+                </motion.div>
+              ))}
             </div>
           </motion.div>
         )}
 
-        {/* ── PODIO FINAL (Round 2+) ── */}
+        {/* ── PODIO FINAL Round 2+ ── */}
         {showResults === "classification" && classification && classification.roundNumber >= 2 && (
           <motion.div key="podio"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="flex flex-col items-center justify-center h-full z-10 p-8">
 
-            <motion.h2
-              initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+            <motion.h2 initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
               className="text-2xl md:text-4xl font-black uppercase text-yellow-400 tracking-[0.2em] mb-2">
               🏆 PODIO FINAL
             </motion.h2>
-            <motion.p
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
               className="text-gray-500 uppercase tracking-widest text-sm mb-10">
               {classification.categoryName}
             </motion.p>
 
-            {/* Podio visual */}
             <div className="flex justify-center items-end gap-4 mb-8">
               {/* 2nd */}
               {classification.qualified?.[1] && (
-                <motion.div
-                  initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, type: "spring" }}
+                <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, type: "spring" }}
                   className="flex flex-col items-center">
                   <span className="text-5xl mb-3">🥈</span>
-                  <div className="bg-gray-500/20 border-2 border-gray-400 rounded-2xl p-4 w-36 text-center mb-0 shadow-lg">
+                  <div className="bg-gray-500/20 border-2 border-gray-400 rounded-2xl p-4 w-36 text-center">
                     <span className="text-white font-black text-base block">{classification.qualified[1].name}</span>
                     <span className="text-gray-400 text-sm">{classification.qualified[1].totalScore} pts</span>
                   </div>
-                  <div className="bg-gradient-to-b from-gray-500 to-gray-700 w-36 h-20 rounded-b-xl flex items-center justify-center shadow-inner">
+                  <div className="bg-gradient-to-b from-gray-500 to-gray-700 w-36 h-20 rounded-b-xl flex items-center justify-center">
                     <span className="text-white font-black text-4xl">2°</span>
                   </div>
                 </motion.div>
               )}
               {/* 1st */}
               {classification.qualified?.[0] && (
-                <motion.div
-                  initial={{ opacity: 0, y: 80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, type: "spring" }}
+                <motion.div initial={{ opacity: 0, y: 80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, type: "spring" }}
                   className="flex flex-col items-center">
-                  <motion.span
-                    animate={{ rotate: [-10, 10, -10], scale: [1, 1.1, 1] }}
-                    transition={{ repeat: Infinity, duration: 2 }}
+                  <motion.span animate={{ rotate: [-10, 10, -10], scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }}
                     className="text-6xl mb-3 block">🥇</motion.span>
                   <div className="bg-yellow-500/20 border-2 border-yellow-400 rounded-2xl p-4 w-44 text-center shadow-[0_0_30px_rgba(234,179,8,0.3)]">
                     <span className="text-white font-black text-lg block">{classification.qualified[0].name}</span>
@@ -461,11 +410,10 @@ export default function LiveView() {
               )}
               {/* 3rd */}
               {classification.qualified?.[2] && (
-                <motion.div
-                  initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8, type: "spring" }}
+                <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8, type: "spring" }}
                   className="flex flex-col items-center">
                   <span className="text-5xl mb-3">🥉</span>
-                  <div className="bg-orange-500/20 border-2 border-orange-500 rounded-2xl p-4 w-36 text-center shadow-lg">
+                  <div className="bg-orange-500/20 border-2 border-orange-500 rounded-2xl p-4 w-36 text-center">
                     <span className="text-white font-black text-base block">{classification.qualified[2].name}</span>
                     <span className="text-orange-400 text-sm">{classification.qualified[2].totalScore} pts</span>
                   </div>
@@ -476,11 +424,9 @@ export default function LiveView() {
               )}
             </div>
 
-            {/* Ranking complete smaller */}
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }}
-              className="w-full max-w-md">
-              {[...classification.qualified, ...classification.eliminated]?.slice(3).map((r: any, i: number) => (
+            {/* Rest of ranking */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }} className="w-full max-w-md">
+              {[...classification.qualified, ...(classification.eliminated || [])]?.slice(3).map((r: any) => (
                 <div key={r.participantId} className="flex justify-between py-1.5 text-sm border-b border-border/30 last:border-0">
                   <span className="text-gray-500">#{r.globalPosition} {r.name}</span>
                   <span className="text-gray-400">{r.totalScore} pts</span>

@@ -482,23 +482,32 @@ io.on('connection', (socket) => {
   // ── ADMIN: Send formed groups to Live Screen ──
   socket.on('admin_raffle_done', (data: { type: string; categoryName: string; groups: any[] }) => {
     io.emit('live_raffle_done', data);
+    io.emit('live_raffle_groups', data);
     console.log(`Raffle done for ${data.type}: ${data.groups.length} groups`);
   });
 
   // ── ADMIN: Generate next round ──
-  socket.on('admin_generate_next_round', async (data: { qualifiedIds: string[] }) => {
+  socket.on('admin_generate_next_round', async (data: { qualifiedIds: string[]; categoryId?: string }) => {
     const state = await getState();
-    if (!state.activeCategoryId) return;
+    // Use passed categoryId or fall back to active one
+    const catId = data.categoryId || state.activeCategoryId;
+    if (!catId) {
+      console.error('admin_generate_next_round: no categoryId available');
+      return;
+    }
 
-    const newRound = await generateNextRound(state.activeCategoryId, data.qualifiedIds);
-    const firstGroup = await prisma.group.findFirst({
-      where: { roundId: newRound.id },
-      orderBy: { name: 'asc' }
-    });
-    // DO NOT update status to active yet. Wait for admin_start_tournament.
-
-    await broadcastState();
-    console.log('Nueva ronda generada (Finales creadas pero no iniciadas)');
+    try {
+      const newRound = await generateNextRound(catId, data.qualifiedIds);
+      console.log('Nueva ronda generada:', newRound.id);
+      // Fetch full structure to broadcast
+      await broadcastState();
+      // Also emit a direct structure refresh signal
+      socket.emit('force_structure_refresh');
+      console.log('Nueva ronda generada (Finales creadas pero no iniciadas)');
+    } catch (e: any) {
+      console.error('Error generando siguiente ronda:', e);
+      socket.emit('error', { message: 'Error al generar finales: ' + e.message });
+    }
   });
 
   // ── ADMIN: Edit score (post-pasada) ──

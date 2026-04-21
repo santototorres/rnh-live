@@ -61,11 +61,13 @@ export default function AdminView() {
     socket.on("state_update", (s) => setState(s));
     socket.on("pasada_results", (d) => setPasadaResults(d));
     socket.on("round_classification", (d) => setClassification(d));
+    socket.on("force_structure_refresh", () => fetchStructure());
 
     return () => {
       socket.off("state_update");
       socket.off("pasada_results");
       socket.off("round_classification");
+      socket.off("force_structure_refresh");
     };
   }, [socket]);
 
@@ -204,7 +206,10 @@ export default function AdminView() {
   };
 
   const generateNextRound = (qualifiedIds: string[]) => {
-    socket?.emit("admin_generate_next_round", { qualifiedIds });
+    if (!selectedCatId) return;
+    socket?.emit("admin_generate_next_round", { qualifiedIds, categoryId: selectedCatId });
+    // Also refresh structure after a short delay
+    setTimeout(() => fetchStructure(), 1500);
   };
 
   // ── Derived state ──
